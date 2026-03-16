@@ -1,6 +1,7 @@
 import type { RunState } from './types';
 
 export type RunAction =
+    | { type: 'INIT_RUN'; payload: Partial<RunState> }
     | { type: 'RUN_STARTED'; payload: { workflowId: string } }
     | { type: 'STEP_STARTED'; stepIndex: number; agentType: string }
     | { type: 'STATE_UPDATE'; stepIndex: number; state: string; payload?: any }
@@ -17,6 +18,9 @@ export const runReducer = (state: RunState, action: RunAction): RunState => {
     const now = Date.now();
 
     switch (action.type) {
+        case 'INIT_RUN':
+            return { ...state, ...action.payload, lastUpdated: now };
+
         case 'RUN_STARTED':
             return { ...state, workflowId: action.payload.workflowId, status: 'RUNNING', lastUpdated: now };
 
@@ -73,6 +77,20 @@ export const runReducer = (state: RunState, action: RunAction): RunState => {
                     [action.stepIndex]: {
                         ...state.steps[action.stepIndex],
                         status: 'HEALING'
+                    }
+                }
+            };
+
+        case 'HITL_TRIGGERED':
+            if (!state.steps[action.stepIndex]) return state;
+            return {
+                ...state,
+                lastUpdated: now,
+                steps: {
+                    ...state.steps,
+                    [action.stepIndex]: {
+                        ...state.steps[action.stepIndex],
+                        status: 'REQUIRES_HITL'
                     }
                 }
             };

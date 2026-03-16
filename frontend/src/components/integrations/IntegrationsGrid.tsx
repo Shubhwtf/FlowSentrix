@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Mail,
     Github,
@@ -8,19 +8,19 @@ import {
     Cloud,
     CreditCard
 } from 'lucide-react';
+import { API } from '../../api/client';
 
-const mockIntegrations = [
-    { id: 'ms-graph', name: 'Microsoft Graph API', icon: Mail, status: 'mock', lastTst: '2m ago' },
-    { id: 'github', name: 'GitHub Enteprise', icon: Github, status: 'connected', lastTst: '1h ago' },
-    { id: 'slack', name: 'Slack Workspace', icon: MessageSquare, status: 'mock', lastTst: 'Never' },
-    { id: 'postgres', name: 'PostgreSQL Core', icon: Database, status: 'connected', lastTst: '10s ago' },
-    { id: 'snyk', name: 'Snyk Security', icon: ShieldCheck, status: 'disconnected', lastTst: '3d ago' },
-    { id: 'aws', name: 'AWS CloudTrail', icon: Cloud, status: 'mock', lastTst: '12h ago' },
-    { id: 'stripe', name: 'Stripe Billing', icon: CreditCard, status: 'disconnected', lastTst: 'Never' },
-];
+const iconMap: Record<string, any> = {
+    Mail, Github, MessageSquare, Database, ShieldCheck, Cloud, CreditCard
+};
 
 export const IntegrationsGrid: React.FC = () => {
     const [testing, setTesting] = useState<string | null>(null);
+    const [integrations, setIntegrations] = useState<any[]>([]);
+
+    useEffect(() => {
+        API.integrations.list().then(setIntegrations).catch(console.error);
+    }, []);
 
     const getStatusDisplay = (status: string) => {
         switch (status) {
@@ -31,9 +31,17 @@ export const IntegrationsGrid: React.FC = () => {
         }
     };
 
-    const handleTest = (id: string) => {
+    const handleTest = async (id: string) => {
         setTesting(id);
-        setTimeout(() => setTesting(null), 1500);
+        try {
+            const updated = await API.integrations.test(id);
+            setIntegrations(prev => prev.map(int => int.id === id ? { ...int, ...updated } : int));
+        } catch (e) {
+            console.error(e);
+            alert('Failed to test integration');
+        } finally {
+            setTesting(null);
+        }
     };
 
     return (
@@ -44,35 +52,37 @@ export const IntegrationsGrid: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-3 gap-6">
-                {mockIntegrations.map(int => (
-                    <div key={int.id} className="bg-white dark:bg-fs-surface-dark border border-fs-border-light dark:border-fs-border-dark p-6 flex flex-col hover:border-fs-cyan transition-colors">
-                        <div className="flex justify-between items-start mb-6">
-                            <div className="w-12 h-12 bg-fs-surface-light dark:bg-fs-bg-dark border border-fs-border-light dark:border-fs-border-dark flex items-center justify-center">
-                                <int.icon size={24} className="opacity-80" />
-                            </div>
-                            {int.status === 'mock' && (
-                                <span className="font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 bg-amber-500/20 text-amber-500 border border-amber-500/30">MOCK</span>
-                            )}
-                        </div>
-
-                        <h3 className="font-bold tracking-tight text-lg mb-4">{int.name}</h3>
-
-                        <div className="flex-1 flex flex-col justify-end space-y-4">
-                            <div className="flex justify-between items-end font-mono text-xs uppercase">
-                                {getStatusDisplay(int.status)}
-                                <span className="text-gray-500">Last: {int.lastTst}</span>
+                {integrations.map(int => {
+                    const Icon = iconMap[int.type] || Cloud;
+                    return (
+                        <div key={int.id} className="bg-white dark:bg-fs-surface-dark border border-fs-border-light dark:border-fs-border-dark p-6 flex flex-col hover:border-fs-cyan transition-colors">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="w-12 h-12 bg-fs-surface-light dark:bg-fs-bg-dark border border-fs-border-light dark:border-fs-border-dark flex items-center justify-center">
+                                    <Icon size={24} className="opacity-80" />
+                                </div>
                             </div>
 
-                            <button
-                                onClick={() => handleTest(int.id)}
-                                disabled={testing === int.id}
-                                className="w-full border border-fs-border-light dark:border-fs-border-dark py-2 font-mono text-xs font-bold uppercase hover:bg-fs-surface-light dark:hover:bg-fs-bg-dark transition-colors disabled:opacity-50"
-                            >
-                                {testing === int.id ? 'TESTING...' : 'TEST CONNECTION'}
-                            </button>
+                            <h3 className="font-bold tracking-tight text-lg mb-4">{int.name}</h3>
+
+                            <div className="flex-1 flex flex-col justify-end space-y-4">
+                                <div className="flex justify-between items-end font-mono text-[10px] uppercase">
+                                    {getStatusDisplay(int.health_status)}
+                                    <span className="text-gray-500">
+                                        Last: {int.last_tested_at ? new Date(int.last_tested_at).toLocaleTimeString() : 'Never'}
+                                    </span>
+                                </div>
+
+                                <button
+                                    onClick={() => handleTest(int.id)}
+                                    disabled={testing === int.id}
+                                    className="w-full border border-fs-border-light dark:border-fs-border-dark py-2 font-mono text-xs font-bold uppercase hover:bg-fs-surface-light dark:hover:bg-fs-bg-dark transition-colors disabled:opacity-50"
+                                >
+                                    {testing === int.id ? 'TESTING...' : 'TEST CONNECTION'}
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

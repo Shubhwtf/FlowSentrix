@@ -12,7 +12,7 @@ export interface WorkflowDefinition {
 export interface WorkflowRun {
     id: string;
     workflow_id: string;
-    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REQUIRES_HITL' | 'PAUSED';
     trigger_payload: any;
     started_at: string;
     completed_at: string | null;
@@ -20,8 +20,10 @@ export interface WorkflowRun {
 }
 
 export class APIClientError extends Error {
-    constructor(public status: number, message: string) {
+    status: number;
+    constructor(status: number, message: string) {
         super(message);
         this.name = 'APIClientError';
+        this.status = status;
     }
 }

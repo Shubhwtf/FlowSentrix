@@ -12,6 +12,7 @@ const statusColors: Record<string, string> = {
     SCORING: 'bg-purple-500/10 text-purple-500 border-l-purple-500',
     SUCCEEDED: 'bg-green-500/10 text-green-500 border-l-green-500',
     HEALING: 'bg-amber-500/15 text-amber-500 border-l-amber-500',
+    REQUIRES_HITL: 'bg-orange-500/10 text-orange-500 border-l-orange-500',
     AWAITING_HITL: 'bg-orange-500/10 text-orange-500 border-l-orange-500',
     ROLLED_BACK: 'bg-yellow-500/10 text-yellow-500 border-l-yellow-500',
     FAILED: 'bg-red-500/10 text-red-500 border-l-red-500'

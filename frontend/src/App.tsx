@@ -9,12 +9,8 @@ import { ComplianceView } from './components/compliance/ComplianceView';
 import { RiskFeedView } from './components/risk/RiskFeedView';
 import { AnalyticsView } from './components/analytics/AnalyticsView';
 import { IntegrationsGrid } from './components/integrations/IntegrationsGrid';
-
-const EmptyView = ({ title }: { title: string }) => (
-  <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm uppercase">
-    {title} - Coming Soon
-  </div>
-);
+import { RunsList } from './components/runs/RunsList';
+import { AutopsyList } from './components/analytics/AutopsyList';
 
 export const App = () => {
   return (
@@ -23,9 +19,9 @@ export const App = () => {
         <Route path="/" element={<Layout />}>
           <Route index element={<LiveDashboard />} />
           <Route path="workflows" element={<WorkflowList />} />
-          <Route path="runs" element={<EmptyView title="Active Runs" />} />
+          <Route path="runs" element={<RunsList />} />
           <Route path="healing" element={<HealingEventsTable />} />
-          <Route path="autopsy" element={<EmptyView title="Autopsy Reports" />} />
+          <Route path="autopsy" element={<AutopsyList />} />
           <Route path="hitl" element={<HITLQueue />} />
           <Route path="compliance" element={<ComplianceView />} />
           <Route path="security" element={<SecurityView />} />

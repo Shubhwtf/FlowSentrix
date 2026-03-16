@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
     Home,
     GitBranch,
-    Activity,
     HeartPulse,
     FileText,
     UserCheck,
@@ -14,14 +13,14 @@ import {
     Plug,
     ExternalLink
 } from 'lucide-react';
+import { API } from '../../api/client';
 
 const navItems = [
     { name: 'Dashboard', path: '/', icon: Home },
     { name: 'Workflows', path: '/workflows', icon: GitBranch },
-    { name: 'Active Runs', path: '/runs', icon: Activity },
     { name: 'Healing Events', path: '/healing', icon: HeartPulse },
     { name: 'Autopsy Reports', path: '/autopsy', icon: FileText },
-    { name: 'HITL Queue', path: '/hitl', icon: UserCheck, badge: 2 },
+    { name: 'HITL Queue', path: '/hitl', icon: UserCheck },
     { name: 'Compliance', path: '/compliance', icon: Shield },
     { name: 'Security', path: '/security', icon: Lock },
     { name: 'Risk Monitor', path: '/risk', icon: AlertTriangle },
@@ -30,6 +29,19 @@ const navItems = [
 ];
 
 export const Sidebar: React.FC = () => {
+    const [hitlCount, setHitlCount] = useState(0);
+
+    useEffect(() => {
+        const fetchCount = () => {
+            API.hitl.list()
+                .then(data => setHitlCount(data.filter((e: any) => e.status === 'PENDING').length))
+                .catch(() => { });
+        };
+        fetchCount();
+        const interval = setInterval(fetchCount, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <aside className="w-60 h-[calc(100vh-56px)] fixed left-0 top-14 bg-fs-surface-light dark:bg-fs-bg-dark border-r border-fs-border-light dark:border-fs-border-dark flex flex-col pt-4">
             <nav className="flex-1 px-3 space-y-1">
@@ -48,9 +60,9 @@ export const Sidebar: React.FC = () => {
                             <item.icon size={18} />
                             <span>{item.name}</span>
                         </div>
-                        {item.badge && (
-                            <span className="bg-fs-cyan text-black px-1.5 py-0.5 text-xs font-mono rounded-sm">
-                                {item.badge}
+                        {item.name === 'HITL Queue' && hitlCount > 0 && (
+                            <span className="bg-red-500 text-white px-1.5 py-0.5 text-xs font-mono rounded-sm">
+                                {hitlCount}
                             </span>
                         )}
                     </NavLink>

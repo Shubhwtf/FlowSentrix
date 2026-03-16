@@ -1,20 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { API } from '../../api/client';
 import type { WorkflowDefinition } from '../../api/types';
+import { CreateWorkflowModal } from './CreateWorkflowModal';
 
 export const WorkflowList: React.FC = () => {
     const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [cloneData, setCloneData] = useState<{ name: string; steps: string; confidence_thresholds: string } | null>(null);
 
-    useEffect(() => {
+    const loadWorkflows = useCallback(() => {
         API.workflows.list().then(setWorkflows).catch(console.error);
     }, []);
+
+    useEffect(() => {
+        loadWorkflows();
+    }, [loadWorkflows]);
+
+    const handleClone = (e: React.MouseEvent, wf: WorkflowDefinition) => {
+        e.stopPropagation();
+        setCloneData({
+            name: wf.name,
+            steps: JSON.stringify(wf.steps, null, 2),
+            confidence_thresholds: JSON.stringify(wf.confidence_thresholds || {}, null, 2)
+        });
+        setIsCreateModalOpen(true);
+    };
+
+    const handleCreateNew = () => {
+        setCloneData(null);
+        setIsCreateModalOpen(true);
+    };
 
     return (
         <div className="max-w-6xl mx-auto space-y-4">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold tracking-tight">Workflow Definitions</h1>
-                <span className="font-mono text-xs px-3 py-1 bg-fs-surface-light dark:bg-fs-surface-dark border border-fs-border-light dark:border-fs-border-dark">{workflows.length} REGISTERED</span>
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Workflow Definitions</h1>
+                    <span className="font-mono text-xs px-3 py-1 bg-fs-surface-light dark:bg-fs-surface-dark border border-fs-border-light dark:border-fs-border-dark inline-block mt-2">{workflows.length} REGISTERED</span>
+                </div>
+                <button
+                    onClick={handleCreateNew}
+                    className="bg-fs-cyan text-black px-6 py-2 font-mono font-bold hover:bg-[#00E5FF] transition-colors"
+                >
+                    + CREATE WORKFLOW
+                </button>
             </div>
 
             {workflows.map(wf => (
@@ -40,7 +70,11 @@ export const WorkflowList: React.FC = () => {
                                 <span className="font-mono font-bold text-lg text-green-500">98.4%</span>
                             </div>
 
-                            <button className="bg-fs-cyan text-black px-6 py-2 font-medium hover:bg-opacity-90" onClick={(e) => { e.stopPropagation(); /* Optional trigger run from here */ }}>
+                            <button className="text-gray-400 hover:text-white font-mono text-xs uppercase px-4 py-2 border border-fs-border-light dark:border-fs-border-dark" onClick={(e) => handleClone(e, wf)}>
+                                CLONE
+                            </button>
+
+                            <button className="bg-fs-surface-light dark:bg-gray-800 text-white px-6 py-2 font-medium hover:bg-gray-700 transition border border-fs-border-dark" onClick={(e) => { e.stopPropagation(); /* Optional trigger run from here */ }}>
                                 TRIGGER RUN
                             </button>
                         </div>
@@ -53,6 +87,13 @@ export const WorkflowList: React.FC = () => {
                     )}
                 </div>
             ))}
+
+            <CreateWorkflowModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSuccess={loadWorkflows}
+                initialData={cloneData}
+            />
         </div>
     );
 };

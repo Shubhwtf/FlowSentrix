@@ -13,7 +13,6 @@ export const NewRunModal: React.FC<NewRunModalProps> = ({ isOpen, onClose, onRun
     const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
     const [selectedWf, setSelectedWf] = useState<string>('');
     const [payload, setPayload] = useState('{\n  \n}');
-    const [demoMode, setDemoMode] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
@@ -27,13 +26,6 @@ export const NewRunModal: React.FC<NewRunModalProps> = ({ isOpen, onClose, onRun
         }
     }, [isOpen]);
 
-    useEffect(() => {
-        if (demoMode) {
-            setPayload(JSON.stringify({ DEMO_INJECT_FAILURE_AT_STEP: 4 }, null, 2));
-        } else {
-            setPayload('{\n  \n}');
-        }
-    }, [demoMode]);
 
     const handleSubmit = async () => {
         if (!selectedWf) return;
@@ -69,10 +61,6 @@ export const NewRunModal: React.FC<NewRunModalProps> = ({ isOpen, onClose, onRun
                 <div>
                     <div className="flex justify-between items-center mb-1">
                         <label className="block text-sm font-medium">Initial Payload (JSON)</label>
-                        <label className="flex items-center space-x-2 text-sm">
-                            <input type="checkbox" checked={demoMode} onChange={(e) => setDemoMode(e.target.checked)} className="accent-fs-cyan" />
-                            <span>Demo Mode (Inject Failure)</span>
-                        </label>
                     </div>
                     <textarea
                         value={payload}
