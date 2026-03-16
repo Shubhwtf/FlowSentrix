@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  postgres:
+  db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: flowsentrix
     ports:
       - "5432:5432"
@@ -18,6 +18,21 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/flowsentrix
+      - REDIS_URL=redis://redis:6379
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./src:/app/src
 
 volumes:
   postgres_data:

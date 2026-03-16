@@ -91,6 +91,22 @@ export interface ComplianceReportsTable {
   generated_at: ColumnType<Date, string | undefined, never>;
 }
 
+export interface ComplianceControlsTable {
+  id: string;
+  framework: string;
+  description: string;
+  status: string;
+  score: number;
+}
+
+export interface ComplianceGapsTable {
+  id: Generated<string>;
+  framework: string;
+  description: string;
+  action_required: string;
+  effort: string;
+}
+
 export interface VulnerabilitiesTable {
   id: Generated<string>;
   cve_id: string;
@@ -132,6 +148,8 @@ export interface Database {
   hitl_requests: HitlRequestsTable;
   integrations: IntegrationsTable;
   compliance_reports: ComplianceReportsTable;
+  compliance_controls: ComplianceControlsTable;
+  compliance_gaps: ComplianceGapsTable;
   vulnerabilities: VulnerabilitiesTable;
   risk_flags: RiskFlagsTable;
   audit_log: AuditLogTable;

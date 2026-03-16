@@ -89,6 +89,22 @@ CREATE TABLE IF NOT EXISTS compliance_reports (
   generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS compliance_controls (
+  id TEXT PRIMARY KEY,
+  framework TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  score INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS compliance_gaps (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  framework TEXT NOT NULL,
+  description TEXT NOT NULL,
+  action_required TEXT NOT NULL,
+  effort TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS vulnerabilities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cve_id TEXT NOT NULL,

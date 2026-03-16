@@ -18,8 +18,9 @@ export const executeGroqWithRetry = async (
         try {
             const response = await groq.chat.completions.create({
                 messages,
-                model: 'llama-3.3-70b-versatile',
+                model: 'llama-3.1-8b-instant',
                 temperature: 0.1,
+                max_tokens: 1024,
                 tools,
                 tool_choice: tools ? 'auto' : 'none',
             });
@@ -39,7 +40,7 @@ export const preWarmGroqModel = async () => {
         const startTime = Date.now();
         await groq.chat.completions.create({
             messages: [{ role: 'user', content: 'Warmup.' }],
-            model: 'llama-3.3-70b-versatile',
+            model: 'llama-3.1-8b-instant',
             max_tokens: 5,
         });
         logger.info({ elapsedMs: Date.now() - startTime }, 'GroqClientPreWarmSuccess');

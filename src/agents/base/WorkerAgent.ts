@@ -35,10 +35,17 @@ export class WorkerAgent {
 
         await this.transition('RUNNING');
 
+        const minimizedContext = {
+            workflowId: this.context.workflowId,
+            runId: this.context.runId,
+            stepIndex: this.context.stepIndex,
+            previousOutputs: this.context.previousOutputs
+        };
+
         const messages = [
             { role: 'system', content: this.systemPrompt },
-            { role: 'system', content: `Context: ${JSON.stringify(this.context)}` },
-            { role: 'user', content: `Task Input: ${JSON.stringify(this.inputPayload)}` }
+            { role: 'system', content: `Context: ${JSON.stringify(minimizedContext).substring(0, 3000)}` },
+            { role: 'user', content: `Task Input: ${JSON.stringify(this.inputPayload).substring(0, 1000)}` }
         ];
 
         try {
@@ -55,6 +62,37 @@ export class WorkerAgent {
                 const cleaned = rawScoreAnswer.replace(/```json/g, '').replace(/```/g, '');
                 scoreData = JSON.parse(cleaned);
             } catch (e) {
+            }
+
+            const workflow = await db.selectFrom('workflow_definitions').selectAll().where('id', '=', this.context.workflowId).executeTakeFirst();
+            let threshold = 75;
+            if (workflow && workflow.confidence_thresholds) {
+                const thresholds = typeof workflow.confidence_thresholds === 'string' ? JSON.parse(workflow.confidence_thresholds) : workflow.confidence_thresholds;
+                threshold = thresholds[this.agentType] || thresholds['default'] || thresholds['global'] || 75;
+            }
+
+            if (scoreData.score < threshold) {
+                await this.transition('FAILED', { error: `Low Confidence Score: ${scoreData.score} < ${threshold}` });
+
+                await db.updateTable('run_steps')
+                    .set({
+                        output: JSON.stringify(finalAnswer),
+                        confidence_score: scoreData.score,
+                        llm_conversation: JSON.stringify(conversationHistory),
+                        status: 'FAILED'
+                    })
+                    .where('run_id', '=', this.runId)
+                    .where('step_index', '=', this.stepIndex)
+                    .execute();
+
+                await publishEvent(this.runId, {
+                    type: 'STEP_FAILED',
+                    stepIndex: this.stepIndex,
+                    agentType: this.agentType,
+                    payload: { error: `Low Confidence Score: ${scoreData.score} < ${threshold}`, score: scoreData.score }
+                });
+
+                throw new Error(`Low Confidence Score: ${scoreData.score} (Threshold: ${threshold})`);
             }
 
             await db.updateTable('run_steps')
@@ -82,13 +120,16 @@ export class WorkerAgent {
             await this.transition('SUCCEEDED');
             return { output: finalAnswer, score: scoreData.score };
         } catch (error: any) {
-            await this.transition('FAILED', { error: error.message });
-            await publishEvent(this.runId, {
-                type: 'STEP_FAILED',
-                stepIndex: this.stepIndex,
-                agentType: this.agentType,
-                payload: { error: error.message }
-            });
+            // Only re-transition and re-throw if it wasn't a handled failure
+            if (this.state !== 'FAILED') {
+                await this.transition('FAILED', { error: error.message });
+                await publishEvent(this.runId, {
+                    type: 'STEP_FAILED',
+                    stepIndex: this.stepIndex,
+                    agentType: this.agentType,
+                    payload: { error: error.message }
+                });
+            }
             throw error;
         }
     }

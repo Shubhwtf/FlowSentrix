@@ -42,3 +42,21 @@ export const getFullSnapshot = async (runId: string, targetStepIndex: number): P
 
     return JSON.stringify(currentState);
 };
+
+export const replayFromSnapshot = async (runId: string, snapId: string, correctedStrategy: any) => {
+    const stepIndex = parseInt(snapId.split(':').pop() || '1');
+    const fullStateStr = await getFullSnapshot(runId, stepIndex);
+    if (!fullStateStr) throw new Error('Snapshot not found');
+
+    // Inject corrected strategy to the state (usually replacing the input or modifying context structure)
+    const state = JSON.parse(fullStateStr);
+
+    // We would dispatch orchestrator to resume. For now just publish the REPLAY_STARTED event
+    await redisClient.publish('events', JSON.stringify({
+        type: 'REPLAY_STARTED',
+        runId,
+        stepIndex,
+        payload: { correctedStrategy }
+    }));
+};
+
