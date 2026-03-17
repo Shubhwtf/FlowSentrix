@@ -3,9 +3,11 @@ import { runLLaMALoop } from './base/LLaMALoop';
 import { publishEvent, redisSub } from '../events/bus';
 import { getFullSnapshot } from '../events/snapshots';
 import { executeTool } from './base/ToolRegistry';
-import * as puppeteer from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
+import puppeteer from 'puppeteer';
+import { Resend } from 'resend';
+import { buildHitlEmailHtml } from '../integrations/email/templates';
 
 interface HealingStrategy {
     rootCause: string;
@@ -24,10 +26,12 @@ export class HealerAgent {
     private healingInProgress = new Set<string>();
 
     public listen(runId: string) {
-        redisSub.subscribe(`run:events:${runId}`);
-        redisSub.on('message', async (channel: string, message: string) => {
+        const sub = redisSub.duplicate();
+        sub.subscribe(`run:events:${runId}`);
+        sub.on('message', async (channel: string, message: string) => {
             if (channel !== `run:events:${runId}`) return;
             const event = JSON.parse(message) as { type: string; stepIndex?: number; payload?: any };
+            console.log(`[HealerAgent] [${runId}] Received event: ${event.type}`);
             if (event.type === 'HEAL_REQUIRED' && event.stepIndex !== undefined) {
                 const key = `${runId}:${event.stepIndex}`;
                 if (this.healingInProgress.has(key)) {
@@ -106,6 +110,7 @@ export class HealerAgent {
             const tokenResult = await executeTool('generate_hitl_token', JSON.stringify({ hitlId: runId })) as { token: string; hitlUrl: string };
 
             await db.insertInto('hitl_requests').values({
+                id: tokenResult.token,
                 run_id: runId,
                 step_id: stepId,
                 llm_briefing: `Healer agent exhausted ${maxRetries} retries at step ${stepIndex}. Strategies attempted: ${strategies.map(s => s.strategy).join(', ')}. Manual intervention required.`,
@@ -120,9 +125,36 @@ export class HealerAgent {
             await publishEvent(runId, { type: 'HITL_TRIGGERED', stepIndex, payload: { hitlUrl: tokenResult.hitlUrl } });
 
             await executeTool('post_slack', JSON.stringify({
-                channel: 'ops-alerts',
+                channel: 'ops',
                 message: `🚨 HITL Required: Run ${runId} stalled at step ${stepIndex}. Healing exhausted after ${maxRetries} attempts. Approve: ${tokenResult.hitlUrl}`
             }));
+
+            const run = await db.selectFrom('workflow_runs').select('workflow_id').where('id', '=', runId).executeTakeFirst();
+            if (run?.workflow_id === 'employee_onboarding' || run?.workflow_id === 'onboarding_pipeline') {
+                await executeTool('post_slack', JSON.stringify({
+                    channel: 'onboarding',
+                    message: `⚠️ HITL Required during onboarding: Run \`${runId}\` stalled at step ${stepIndex}. Review: ${tokenResult.hitlUrl}`
+                }));
+            }
+
+            // Send real email if SMTP is configured
+            if (process.env.MOCK_SMTP !== 'true' && process.env.RESEND_API_KEY) {
+                try {
+                    const resend = new Resend(process.env.RESEND_API_KEY);
+                    const email = process.env.EMAIL_DEMO_RECIPIENT || 'team@example.com';
+                    const briefing = `Healer agent exhausted ${maxRetries} retries. Strategies attempted: ${strategies.map((s: any) => s.strategy).join(', ')}`;
+                    const html = buildHitlEmailHtml(runId, stepIndex, tokenResult.hitlUrl, briefing);
+
+                    await resend.emails.send({
+                        from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+                        to: email,
+                        subject: `[FlowSentrix] ACTION REQUIRED: HITL Intervention (${runId})`,
+                        html
+                    });
+                } catch (e) {
+                    console.error("Failed to send HITL email:", e);
+                }
+            }
         }
 
         await db.insertInto('healing_events').values({
@@ -147,6 +179,17 @@ export class HealerAgent {
     }
 
     private async generateAutopsy(runId: string, stepId: string, strategies: HealingStrategy[], success: boolean, originalError?: any) {
+        // Prevent redundant autopsies for the same run
+        const existingReport = await db.selectFrom('autopsy_reports')
+            .selectAll()
+            .where('run_id', '=', runId)
+            .executeTakeFirst();
+
+        if (existingReport && existingReport.pdf_path) {
+            console.log(`[HealerAgent] Autopsy for run ${runId} already exists. Skipping.`);
+            return;
+        }
+
         const run = await db.selectFrom('workflow_runs').selectAll().where('id', '=', runId).executeTakeFirst();
         const steps = await db.selectFrom('run_steps')
             .selectAll()
@@ -205,6 +248,23 @@ Format it strictly with these headings:
             .execute();
 
         await publishEvent(runId, { type: 'AUTOPSY_PDF_READY', payload: { pdfPath } });
+
+        // Post minimal summary + PDF to Slack
+        const wfName = run?.workflow_id ?? 'unknown';
+        const summary = success
+            ? `✅ *Heal Successful*: Step failure in \`${wfName}\` was automatically resolved.`
+            : `❌ *Heal Failed*: Step in \`${wfName}\` could not be automatically recovered and requires manual triage.`;
+
+        await executeTool('post_slack', JSON.stringify({
+            channel: 'ops',
+            message: summary
+        }));
+
+        await executeTool('post_slack_file', JSON.stringify({
+            channel: 'ops',
+            filePath: pdfPath,
+            initialComment: `📄 *Autopsy Report* for Run \`${runId}\``
+        }));
     }
 
     private buildSparklineSvg(scores: number[]): string {
@@ -224,11 +284,11 @@ Format it strictly with these headings:
         const dots = scores.map((score, i) => {
             const x = i * xStep;
             const y = ((100 - score) / 100) * height;
-            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#00D4FF"><title>${score}</title></circle>`;
+            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#111111"><title>${score}</title></circle>`;
         }).join('');
 
         return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-            <polyline points="${points}" fill="none" stroke="#00D4FF" stroke-width="2"/>
+            <polyline points="${points}" fill="none" stroke="#111111" stroke-width="2"/>
             ${dots}
         </svg>`;
     }
@@ -248,17 +308,17 @@ Format it strictly with these headings:
         const html = `<!DOCTYPE html><html>
         <head>
             <style>
-                body { font-family: 'Courier New', monospace; background: #0A0A0B; color: #fff; padding: 40px; }
-                h1 { color: #00D4FF; border-bottom: 2px solid #00D4FF; padding-bottom: 12px; }
-                h2 { color: #00D4FF; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; margin-top: 30px; }
-                .meta { color: #888; font-size: 12px; margin-bottom: 30px; }
-                .report { background: #111; border-left: 4px solid #00D4FF; padding: 20px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+                body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background: #ffffff; color: #000; padding: 40px; }
+                h1 { color: #000; border-bottom: 2px solid #000; padding-bottom: 12px; }
+                h2 { color: #000; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; margin-top: 30px; }
+                .meta { color: #52525b; font-size: 12px; margin-bottom: 30px; }
+                .report { background: #fafafa; border-left: 4px solid #000; padding: 20px; white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
                 table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                th { background: #1a1a1e; text-align: left; padding: 8px; color: #888; text-transform: uppercase; }
-                td { padding: 8px; border-bottom: 1px solid #333; }
-                .outcome { color: ${content.success ? '#22c55e' : '#ef4444'}; font-weight: bold; }
-                .sparkline-container { background: #111; padding: 16px; border: 1px solid #333; }
-                .footer { color: #555; font-size: 11px; margin-top: 40px; border-top: 1px solid #333; padding-top: 16px; }
+                th { background: #f4f4f5; text-align: left; padding: 8px; color: #52525b; text-transform: uppercase; }
+                td { padding: 8px; border-bottom: 1px solid #e4e4e7; }
+                .outcome { color: ${content.success ? '#16a34a' : '#dc2626'}; font-weight: bold; }
+                .sparkline-container { background: #fafafa; padding: 16px; border: 1px solid #e4e4e7; }
+                .footer { color: #71717a; font-size: 11px; margin-top: 40px; border-top: 1px solid #e4e4e7; padding-top: 16px; }
             </style>
         </head>
         <body>

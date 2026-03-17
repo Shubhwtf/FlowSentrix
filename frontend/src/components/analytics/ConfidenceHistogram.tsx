@@ -18,7 +18,7 @@ export const ConfidenceHistogram: React.FC = () => {
         if (index < 3) return '#ef4444';
         if (index < 6) return '#f59e0b';
         if (index < 8) return '#22d3ee';
-        return '#00D4FF';
+        return 'var(--text-primary)';
     };
 
     return (

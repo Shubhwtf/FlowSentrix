@@ -20,10 +20,11 @@ export class MonitorAgent {
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
             const recentHeals = await db.selectFrom('healing_events')
-                .select('id')
-                .where('run_id', 'in', runIds)
-                .where('step_id', '=', stepIndex.toString())
-                .where('created_at', '>=', twentyFourHoursAgo)
+                .innerJoin('run_steps', 'run_steps.id', 'healing_events.step_id')
+                .select('healing_events.id')
+                .where('healing_events.run_id', 'in', runIds)
+                .where('run_steps.step_index', '=', stepIndex)
+                .where('healing_events.created_at', '>=', twentyFourHoursAgo)
                 .execute();
 
             if (recentHeals.length >= 3) {
@@ -36,7 +37,7 @@ export class MonitorAgent {
                 });
 
                 await executeTool('post_slack', JSON.stringify({
-                    channel: 'ops-alerts',
+                    channel: 'ops',
                     message: summary
                 }));
             }
@@ -46,10 +47,12 @@ export class MonitorAgent {
     }
 
     public listen(runId: string) {
-        redisSub.subscribe(`run:events:${runId}`);
-        redisSub.on('message', async (channel, message) => {
+        const sub = redisSub.duplicate();
+        sub.subscribe(`run:events:${runId}`);
+        sub.on('message', async (channel, message) => {
             if (channel !== `run:events:${runId}`) return;
             const event: WorkflowEvent = JSON.parse(message);
+            console.log(`[MonitorAgent] [${runId}] Received event: ${event.type}`);
 
             if (event.type === 'STEP_OUTPUT' && event.payload?.score !== undefined) {
                 if (event.payload.score < this.confidenceThreshold) {

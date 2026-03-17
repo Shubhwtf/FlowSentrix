@@ -138,6 +138,15 @@ export interface AuditLogTable {
   timestamp: ColumnType<Date, string | undefined, never>;
 }
 
+export interface EmployeesTable {
+  id: Generated<string>;
+  name: string;
+  role: string;
+  email: string;
+  department: string;
+  created_at: ColumnType<Date, string | undefined, never>;
+}
+
 export interface Database {
   workflow_definitions: WorkflowDefinitionsTable;
   workflow_runs: WorkflowRunsTable;
@@ -153,4 +162,5 @@ export interface Database {
   vulnerabilities: VulnerabilitiesTable;
   risk_flags: RiskFlagsTable;
   audit_log: AuditLogTable;
+  employees: EmployeesTable;
 }

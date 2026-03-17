@@ -1,31 +1,78 @@
+@import "@fontsource/geist/400.css";
+@import "@fontsource/geist/500.css";
+@import "@fontsource/geist/600.css";
+@import "@fontsource/geist/700.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --bg-color: #FAFAF9;
-    --surface-color: #F4F4F5;
-    --border-color: #E4E4E7;
-    --text-color: #0F0F0F;
-    --accent-color: #00D4FF;
+    --background: #FFFFFF;
+    --surface: #FAFAFA;
+    --surface-elevated: #F4F4F5;
+    --border: #E4E4E7;
+    --border-subtle: #F0F0F0;
+    --text-primary: #000000;
+    --text-secondary: #71717A;
+    --text-muted: #A1A1AA;
+    --accent: #000000;
+    --accent-foreground: #FFFFFF;
+    --destructive: #DC2626;
+    --success: #16A34A;
+    --warning: #D97706;
+    --healing-active: #D97706;
   }
 
   .dark {
-    --bg-color: #0A0A0B;
-    --surface-color: #111113;
-    --border-color: #1C1C1E;
-    --text-color: #F2F2F0;
+    --background: #000000;
+    --surface: #0A0A0A;
+    --surface-elevated: #111111;
+    --border: #1F1F1F;
+    --border-subtle: #141414;
+    --text-primary: #FFFFFF;
+    --text-secondary: #A1A1AA;
+    --text-muted: #52525B;
+    --accent: #FFFFFF;
+    --accent-foreground: #000000;
+    --destructive: #EF4444;
+    --success: #22C55E;
+    --warning: #F59E0B;
+    --healing-active: #F59E0B;
   }
 
   body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    font-family: 'Inter', sans-serif;
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: "Geist", system-ui, sans-serif;
   }
 
-  /* Enforce flat design */
-  * {
-    border-radius: 0 !important;
+  code,
+  pre,
+  .font-mono {
+    font-family: "Geist Mono", ui-monospace, monospace;
+  }
+
+  .font-sans {
+    font-family: "Geist", system-ui, sans-serif;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    border-radius: 6px;
+  }
+
+  [data-badge],
+  .badge,
+  .tag {
+    border-radius: 4px;
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 6px;
   }
 }

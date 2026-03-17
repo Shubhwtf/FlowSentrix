@@ -9,10 +9,10 @@ interface RunTimelineProps {
 export const RunTimeline: React.FC<RunTimelineProps> = ({ runState }) => {
     if (!runState || !runState.workflowId) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-fs-border-light dark:border-fs-border-dark p-12 text-gray-500">
-                <div className="w-3 h-3 rounded-full bg-gray-300 dark:bg-gray-700 mb-4"></div>
+            <div className="flex-1 flex flex-col items-center justify-center border border-border rounded-md p-12 text-text-secondary bg-surface">
+                <div className="w-2 h-2 rounded-full bg-text-muted mb-4"></div>
                 <p className="font-mono text-sm uppercase">Waiting for Active Run</p>
-                <p className="text-xs mt-2 max-w-sm text-center">Trigger a new run via the New Run button or await an incoming SSE connection.</p>
+                <p className="text-xs mt-2 max-w-sm text-center text-text-muted">Trigger a new run via the New Run button or await an incoming SSE connection.</p>
             </div>
         );
     }

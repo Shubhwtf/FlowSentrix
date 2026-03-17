@@ -3,7 +3,7 @@ import { redisClient } from './bus';
 
 export interface TransactionLogEntry {
     runId: string;
-    stepIndex: number;
+    stepIndex?: number;
     operationType: string;
     target: string;
     inversePayload: any;

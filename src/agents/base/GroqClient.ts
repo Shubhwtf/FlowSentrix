@@ -10,27 +10,39 @@ export const groq = new Groq({ apiKey });
 
 export const executeGroqWithRetry = async (
     messages: any[],
-    tools?: any[],
+    tools: any[] = [],
+    taskType: string = 'default',
     retries = 3,
     backoffMs = 500
 ): Promise<any> => {
-    for (let attempt = 1; attempt <= retries; attempt++) {
+    const defaultModel = process.env.GROQ_MODEL_DEFAULT || 'llama-3.1-8b-instant';
+    const heavyModel = process.env.GROQ_MODEL_HEAVY || 'llama-3.3-70b-versatile';
+    const maxTokens = Number(process.env.GROQ_MAX_TOKENS || '1024');
+    let model = defaultModel;
+    if (['autopsy', 'document_generation', 'code_analysis'].includes(taskType)) {
+        model = heavyModel;
+    }
+
+    console.log(`[GroqClient] [${taskType}] Requesting ${model} with ${tools.length} tools`);
+
+    const responseFormat = taskType === 'confidence_scoring' ? { type: 'json_object' } : undefined;
+
+    for (let i = 0; i < 3; i++) {
         try {
-            const response = await groq.chat.completions.create({
+            const completion = await groq.chat.completions.create({
                 messages,
-                model: 'llama-3.1-8b-instant',
+                model,
                 temperature: 0.1,
-                max_tokens: 1024,
-                tools,
-                tool_choice: tools ? 'auto' : 'none',
+                max_tokens: maxTokens,
+                tools: tools && tools.length > 0 ? tools : undefined,
+                tool_choice: tools && tools.length > 0 ? 'auto' : 'none',
+                response_format: responseFormat as any,
             });
-            return response.choices[0].message;
-        } catch (error) {
-            if (attempt === retries) {
-                throw error;
-            }
-            logger.warn({ attempt, error }, 'GroqClientRetry');
-            await new Promise(res => setTimeout(res, backoffMs * attempt));
+            return completion.choices[0].message;
+        } catch (error: any) {
+            console.error(`[GroqClient] Attempt ${i + 1} failed:`, error.message);
+            if (i === 2) throw error;
+            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
         }
     }
 };

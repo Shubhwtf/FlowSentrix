@@ -5,15 +5,15 @@ import { ToastStack, useToast } from './ToastStack';
 import { Outlet } from 'react-router-dom';
 
 export const Layout: React.FC = () => {
-    const { toasts, removeToast } = useToast();
+    const { toasts, removeToast, addToast } = useToast();
 
     return (
-        <div className="min-h-screen bg-fs-bg-light dark:bg-fs-bg-dark text-fs-text-light dark:text-fs-text-dark selection:bg-fs-cyan selection:text-black">
+        <div className="min-h-screen bg-background text-text-primary selection:bg-accent selection:text-accent-foreground">
             <Header />
             <Sidebar />
             <ToastStack toasts={toasts} onDismiss={removeToast} />
-            <main className="ml-60 pt-4 pb-12 px-8 min-h-[calc(100vh-56px)]">
-                <Outlet context={{ addToast: useToast().addToast }} />
+            <main className="ml-[220px] pt-6 pb-12 px-6 min-h-[calc(100vh-48px)]">
+                <Outlet context={{ addToast }} />
             </main>
         </div>
     );

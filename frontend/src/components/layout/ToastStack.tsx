@@ -47,7 +47,7 @@ export const ToastStack: React.FC<{ toasts: ToastMessage[], onDismiss: (id: stri
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        transition={{ duration: 0.12, ease: "easeOut" }}
                         onClick={() => onDismiss(toast.id)}
                         className={`w-80 bg-white dark:bg-fs-surface-dark border-l-4 ${borderColors[toast.type]} shadow-lg px-4 py-3 cursor-pointer relative overflow-hidden`}
                     >
@@ -55,7 +55,7 @@ export const ToastStack: React.FC<{ toasts: ToastMessage[], onDismiss: (id: stri
                         <motion.div
                             initial={{ width: '100%' }}
                             animate={{ width: 0 }}
-                            transition={{ duration: 4, ease: "linear" }}
+                            transition={{ duration: 4, ease: "easeOut" }}
                             className={`absolute bottom-0 left-0 h-0.5 ${borderColors[toast.type].replace('border-', 'bg-')}`}
                         />
                     </motion.div>

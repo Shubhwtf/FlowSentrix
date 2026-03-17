@@ -7,9 +7,17 @@ import * as path from 'path';
 
 dotenv.config();
 
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || 'postgres://user:password@localhost:5432/flowsentrix';
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgres://user:password@localhost:5432/flowsentrix',
+    connectionString,
 });
+
+pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
+});
+
+console.log(`[DB] Using connection string: ${connectionString.split('@').pop()}`);
 
 const dialect = new PostgresDialect({
     pool,

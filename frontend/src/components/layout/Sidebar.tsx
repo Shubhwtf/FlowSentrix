@@ -15,17 +15,28 @@ import {
 } from 'lucide-react';
 import { API } from '../../api/client';
 
-const navItems = [
-    { name: 'Dashboard', path: '/', icon: Home },
-    { name: 'Workflows', path: '/workflows', icon: GitBranch },
-    { name: 'Healing Events', path: '/healing', icon: HeartPulse },
-    { name: 'Autopsy Reports', path: '/autopsy', icon: FileText },
-    { name: 'HITL Queue', path: '/hitl', icon: UserCheck },
-    { name: 'Compliance', path: '/compliance', icon: Shield },
-    { name: 'Security', path: '/security', icon: Lock },
-    { name: 'Risk Monitor', path: '/risk', icon: AlertTriangle },
-    { name: 'Analytics', path: '/analytics', icon: BarChart },
-    { name: 'Integrations', path: '/integrations', icon: Plug },
+const navGroups = [
+    {
+        label: 'Operations',
+        items: [
+            { name: 'Dashboard', path: '/', icon: Home },
+            { name: 'Workflows', path: '/workflows', icon: GitBranch },
+            { name: 'Runs', path: '/runs', icon: GitBranch },
+            { name: 'Healing Events', path: '/healing', icon: HeartPulse },
+            { name: 'HITL Queue', path: '/hitl', icon: UserCheck },
+            { name: 'Autopsy Reports', path: '/autopsy', icon: FileText },
+        ],
+    },
+    {
+        label: 'Governance',
+        items: [
+            { name: 'Compliance', path: '/compliance', icon: Shield },
+            { name: 'Security', path: '/security', icon: Lock },
+            { name: 'Risk Monitor', path: '/risk', icon: AlertTriangle },
+            { name: 'Analytics', path: '/analytics', icon: BarChart },
+            { name: 'Integrations', path: '/integrations', icon: Plug },
+        ],
+    },
 ];
 
 export const Sidebar: React.FC = () => {
@@ -43,35 +54,41 @@ export const Sidebar: React.FC = () => {
     }, []);
 
     return (
-        <aside className="w-60 h-[calc(100vh-56px)] fixed left-0 top-14 bg-fs-surface-light dark:bg-fs-bg-dark border-r border-fs-border-light dark:border-fs-border-dark flex flex-col pt-4">
-            <nav className="flex-1 px-3 space-y-1">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.name}
-                        to={item.path}
-                        className={({ isActive }) =>
-                            `flex items-center justify-between px-3 py-2 text-sm font-medium transition-colors ${isActive
-                                ? 'bg-white dark:bg-fs-surface-dark text-fs-text-light dark:text-fs-text-dark border-l-2 border-fs-cyan'
-                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-fs-surface-dark hover:text-fs-text-light dark:hover:text-fs-text-dark border-l-2 border-transparent'
-                            }`
-                        }
-                    >
-                        <div className="flex items-center space-x-3">
-                            <item.icon size={18} />
-                            <span>{item.name}</span>
-                        </div>
-                        {item.name === 'HITL Queue' && hitlCount > 0 && (
-                            <span className="bg-red-500 text-white px-1.5 py-0.5 text-xs font-mono rounded-sm">
-                                {hitlCount}
-                            </span>
-                        )}
-                    </NavLink>
+        <aside className="w-[220px] h-[calc(100vh-48px)] fixed left-0 top-12 bg-surface border-r border-border flex flex-col">
+            <nav className="flex-1 px-3 py-3 space-y-3">
+                {navGroups.map((group, groupIndex) => (
+                    <div key={group.label} className="space-y-1">
+                        {groupIndex > 0 && <div className="h-px bg-border-subtle my-2" />}
+                        <p className="px-3 py-1 font-mono text-[10px] uppercase tracking-wide text-text-muted">{group.label}</p>
+                        {group.items.map((item) => (
+                            <NavLink
+                                key={item.name}
+                                to={item.path}
+                                className={({ isActive }) =>
+                                    `h-10 px-3 text-[13px] font-medium flex items-center justify-between border-l-2 ${isActive
+                                        ? 'bg-surface-elevated text-text-primary border-l-text-primary'
+                                        : 'text-text-secondary border-l-transparent hover:bg-surface-elevated hover:text-text-primary'
+                                    }`
+                                }
+                            >
+                                <div className="flex items-center gap-3">
+                                    <item.icon size={15} strokeWidth={1.5} />
+                                    <span>{item.name}</span>
+                                </div>
+                                {item.name === 'HITL Queue' && hitlCount > 0 && (
+                                    <span data-badge className="bg-destructive/10 text-destructive border border-destructive/20">
+                                        {hitlCount}
+                                    </span>
+                                )}
+                            </NavLink>
+                        ))}
+                    </div>
                 ))}
             </nav>
 
             <div className="p-3 mb-4">
-                <a href="/docs" target="_blank" rel="noreferrer" className="flex items-center space-x-3 px-3 py-2 text-sm font-medium text-gray-500 hover:text-fs-text-light dark:hover:text-fs-text-dark border-l-2 border-transparent transition-colors">
-                    <ExternalLink size={18} />
+                <a href="/docs" target="_blank" rel="noreferrer" className="h-10 px-3 text-[13px] font-medium flex items-center gap-3 text-text-secondary hover:bg-surface-elevated hover:text-text-primary border-l-2 border-l-transparent">
+                    <ExternalLink size={15} strokeWidth={1.5} />
                     <span>API Docs</span>
                 </a>
             </div>

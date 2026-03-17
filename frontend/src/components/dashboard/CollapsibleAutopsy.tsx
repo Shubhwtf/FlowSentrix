@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API } from '../../api/client';
-import { ChevronDown, ChevronRight, FileText, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Clock } from 'lucide-react';
 
 export const CollapsibleAutopsy: React.FC<{ runId: string }> = ({ runId }) => {
     const [isOpen, setIsOpen] = useState(false);

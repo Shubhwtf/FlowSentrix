@@ -33,17 +33,7 @@ export const autoSeed = async () => {
     const risks = await db.selectFrom('risk_flags').selectAll().execute();
     if (risks.length === 0) {
         console.log('[Seed] Seeding risk flags...');
-        const mockRisks = [];
-        for (let i = 1; i <= 15; i++) {
-            mockRisks.push({
-                risk_score: 50 + i * 3,
-                category: i % 2 === 0 ? 'Access Control' : 'Data Exposure',
-                signals: JSON.stringify({ anomalousLogins: i, time: '3:00 AM' }),
-                correlation_group_id: `GRP-${i % 3}`,
-                acknowledged_by: null
-            });
-        }
-        await db.insertInto('risk_flags').values(mockRisks).execute();
+        return;
     }
 
     const integrations = await db.selectFrom('integrations').selectAll().execute();

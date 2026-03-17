@@ -33,11 +33,11 @@ export const StatCards: React.FC = () => {
     return (
         <div className="grid grid-cols-4 gap-4 mb-6">
             {cards.map((card, i) => (
-                <div key={i} className="bg-white dark:bg-fs-surface-dark border border-fs-border-light dark:border-fs-border-dark p-5 flex flex-col justify-between">
-                    <span className="font-mono text-[10px] text-gray-500 tracking-wider font-semibold">{card.label}</span>
+                <div key={i} className="bg-surface border border-border rounded-md p-5 flex flex-col justify-between">
+                    <span className="font-mono text-[11px] text-text-muted tracking-wider font-semibold">{card.label}</span>
                     <div className="flex items-baseline space-x-2 mt-2">
-                        <span className="font-mono font-bold text-4xl">{card.value}</span>
-                        <span className={`text-xs font-mono ${card.delta.startsWith('+') && parseInt(card.delta) > 0 ? 'text-green-500' : card.delta.startsWith('-') ? 'text-fs-cyan' : 'text-gray-500'}`}>
+                        <span className="font-sans font-bold text-4xl text-text-primary">{card.value}</span>
+                        <span className={`text-xs font-mono ${card.delta.startsWith('+') && parseInt(card.delta, 10) > 0 ? 'text-success' : card.delta.startsWith('-') ? 'text-destructive' : 'text-text-secondary'}`}>
                             {card.delta.startsWith('+') ? '↑' : card.delta.startsWith('-') ? '↓' : ''} {card.delta.replace(/[+-]/, '')}
                         </span>
                     </div>

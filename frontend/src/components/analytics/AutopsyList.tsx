@@ -78,25 +78,10 @@ const AutopsyModal: React.FC<{ row: any; onClose: () => void }> = ({ row, onClos
     const strategies = parsed.strategies || [];
 
     const handleDownload = () => {
-        const plain = [
-            `AUTOPSY REPORT`,
-            `Run ID: ${row.run_id}`,
-            `Generated: ${new Date(row.generated_at).toLocaleString()}`,
-            `Outcome: ${parsed.success ? 'RESOLVED' : 'FAILED'}`,
-            ``,
-            `--- STRATEGIES ATTEMPTED ---`,
-            ...strategies.map((s: any, i: number) => `  ${i + 1}. Strategy: ${s.strategy} | Root Cause: ${s.rootCause}`),
-            ``,
-            `--- REPORT ---`,
-            parsed.report.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/^#+\s/gm, '')
-        ].join('\n');
-        const blob = new Blob([plain], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `autopsy-${row.run_id.split('-')[0]}-${new Date(row.generated_at).toISOString().slice(0, 10)}.txt`;
+        a.href = `/api/runs/${row.run_id}/autopsy/pdf`;
+        a.download = `autopsy-${row.run_id.split('-')[0]}-${new Date(row.generated_at).toISOString().slice(0, 10)}.pdf`;
         a.click();
-        URL.revokeObjectURL(url);
     };
 
     return (
@@ -173,7 +158,7 @@ const AutopsyModal: React.FC<{ row: any; onClose: () => void }> = ({ row, onClos
                     const xStep = scores.length > 1 ? svgWidth / (scores.length - 1) : svgWidth;
                     const points = scores.map((s, i) => `${(i * xStep).toFixed(1)},${(((100 - s) / 100) * svgHeight).toFixed(1)}`).join(' ');
                     const dots = scores.map((s, i) => (
-                        <circle key={i} cx={(i * xStep).toFixed(1)} cy={(((100 - s) / 100) * svgHeight).toFixed(1)} r="3" fill="#00D4FF">
+                        <circle key={i} cx={(i * xStep).toFixed(1)} cy={(((100 - s) / 100) * svgHeight).toFixed(1)} r="3" fill="var(--text-primary)">
                             <title>{s}</title>
                         </circle>
                     ));
@@ -182,7 +167,7 @@ const AutopsyModal: React.FC<{ row: any; onClose: () => void }> = ({ row, onClos
                             <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-3">Confidence Score History</p>
                             <div className="bg-fs-surface-light dark:bg-black p-3 border border-fs-border-light dark:border-fs-border-dark">
                                 <svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
-                                    <polyline points={points} fill="none" stroke="#00D4FF" strokeWidth="2" />
+                                    <polyline points={points} fill="none" stroke="var(--text-primary)" strokeWidth="2" />
                                     {dots}
                                 </svg>
                             </div>

@@ -1,20 +1,28 @@
 import Fastify from 'fastify';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
-import { db } from './db/client';
+import fastifyStatic from '@fastify/static';
+import { db, initializeDatabase } from './db/client';
 import { OrchestratorAgent } from './agents/OrchestratorAgent';
 import { preWarmGroqModel } from './agents/base/GroqClient';
 import { registerAllTools } from './agents/tools';
+import { executeTool } from './agents/base/ToolRegistry';
 import { redisSub, redisClient, publishEvent } from './events/bus';
 import { USE_CASE_2_PIPELINE, USE_CASE_4_PIPELINE } from './agents/workers/templates';
 import { executeRollback } from './events/rollback';
 import { autoSeed } from './db/seed';
 import { extractAndSaveComplianceData } from './agents/ComplianceService';
+import slackRoutes from './routes/slack';
+import { requireApiKey } from './hooks/requireApiKey';
 import * as fs from 'fs';
+import * as path from 'path';
+import { Resend } from 'resend';
+import { buildAutopsyEmailHtml } from './integrations/email/templates';
 
 export const server = Fastify({ logger: true });
 
 export const startServer = async () => {
+    await initializeDatabase();
     await server.register(swagger, {
         swagger: {
             info: {
@@ -46,11 +54,39 @@ export const startServer = async () => {
         },
     });
 
+    await server.register(slackRoutes);
+
+    if (process.env.NODE_ENV === 'production') {
+        await server.register(fastifyStatic, {
+            root: path.join(__dirname, '../../frontend/dist'),
+            prefix: '/'
+        });
+        server.get('/*', { schema: { hide: true } }, (_req, reply) => {
+            reply.sendFile('index.html');
+        });
+    }
+
     server.get('/workflows', { schema: { tags: ['Workflows'], summary: 'List all workflow definitions' } }, async (req, res) => {
         return await db.selectFrom('workflow_definitions').selectAll().execute();
     });
 
-    server.post('/workflows', { schema: { tags: ['Workflows'], summary: 'Create a new workflow definition' } }, async (req: any, res) => {
+    server.post('/workflows', {
+        schema: {
+            tags: ['Workflows'],
+            summary: 'Create a new workflow definition',
+            body: {
+                type: 'object',
+                required: ['name', 'steps'],
+                properties: {
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    confidence_thresholds: { type: 'object' },
+                    hitl_contacts: { type: 'array', items: { type: 'string' } },
+                    steps: { type: 'array' }
+                }
+            }
+        }
+    }, async (req: any) => {
         const data = req.body;
         return await db.insertInto('workflow_definitions').values({
             name: data.name,
@@ -59,7 +95,7 @@ export const startServer = async () => {
         }).returningAll().executeTakeFirstOrThrow();
     });
 
-    server.post('/seed', { schema: { tags: ['System'], summary: 'Re-seed the database with demo templates' } }, async () => {
+    server.post('/seed', { schema: { tags: ['System'], summary: 'Seed the database (protected)' }, preHandler: requireApiKey }, async () => {
         await autoSeed();
         return { success: true };
     });
@@ -78,12 +114,112 @@ export const startServer = async () => {
         }).where('id', '=', req.params.id).returningAll().executeTakeFirstOrThrow();
     });
 
-    server.delete('/workflows/:id', { schema: { tags: ['Workflows'], summary: 'Delete a workflow definition' } }, async (req: any, res) => {
+    server.delete('/workflows/:id', {
+        schema: {
+            tags: ['Workflows'],
+            summary: 'Delete a workflow definition',
+            params: { type: 'object', properties: { id: { type: 'string' } } }
+        },
+        preHandler: requireApiKey
+    }, async (req: any) => {
         await db.deleteFrom('workflow_definitions').where('id', '=', req.params.id).execute();
         return { success: true };
     });
 
-    server.post('/workflows/:id/run', { schema: { tags: ['Workflows'], summary: 'Trigger a new workflow run' } }, async (req: any, res) => {
+    server.get('/api/diagnostics', {
+        schema: {
+            tags: ['System'],
+            summary: 'Comprehensive system diagnostics and connectivity check'
+        }
+    }, async (req, res) => {
+        const results: any = { status: 'COMPLETE', timestamp: new Date().toISOString(), components: {} };
+
+        // 1. Database
+        try {
+            await db.selectFrom('workflow_definitions').select('id').limit(1).execute();
+            results.components.database = { status: 'PASS', details: 'Connected and queryable' };
+        } catch (e: any) {
+            results.components.database = { status: 'FAIL', error: e.message };
+            results.status = 'PARTIAL';
+        }
+
+        // 2. Redis
+        try {
+            await redisClient.ping();
+            results.components.redis = { status: 'PASS', details: 'PONG received' };
+        } catch (e: any) {
+            results.components.redis = { status: 'FAIL', error: e.message };
+            results.status = 'PARTIAL';
+        }
+
+        // 3. Groq (AI)
+        try {
+            const { executeGroqWithRetry } = await import('./agents/base/GroqClient');
+            const resp = await executeGroqWithRetry([{ role: 'user', content: 'Say OK' }], [], 'short_classification');
+            results.components.groq = { status: 'PASS', model: 'llama-3.1-70b-versatile', response: resp.content };
+        } catch (e: any) {
+            results.components.groq = { status: 'FAIL', error: e.message };
+            results.status = 'PARTIAL';
+        }
+
+        // 4. Slack
+        try {
+            const { WebClient } = await import('@slack/web-api');
+            const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+            const auth = await slack.auth.test();
+            results.components.slack = {
+                status: 'PASS',
+                team: auth.team,
+                user: auth.user,
+                channels: {
+                    security: !!process.env.SLACK_CHANNEL_SECURITY,
+                    ops: !!process.env.SLACK_CHANNEL_OPS_ALERTS,
+                    risk: !!process.env.SLACK_CHANNEL_RISK,
+                    onboarding: !!process.env.SLACK_CHANNEL_ONBOARDING
+                }
+            };
+        } catch (e: any) {
+            results.components.slack = { status: 'FAIL', error: e.message };
+            results.status = 'PARTIAL';
+        }
+
+        // 5. GitHub
+        try {
+            const { Octokit } = await import('@octokit/rest');
+            const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
+            const user = await octokit.users.getAuthenticated();
+            results.components.github = { status: 'PASS', user: user.data.login };
+        } catch (e: any) {
+            results.components.github = { status: 'FAIL', error: e.message };
+            results.status = 'PARTIAL';
+        }
+
+        // 6. Resend (Email)
+        try {
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            await resend.apiKeys.list(); // Simple check to verify key
+            results.components.resend = { status: 'PASS', from: process.env.EMAIL_FROM };
+        } catch (e: any) {
+            results.components.resend = { status: 'FAIL', error: e.message };
+            results.status = 'PARTIAL';
+        }
+
+        if (Object.values(results.components).some((c: any) => c.status === 'FAIL')) {
+            results.status = results.status === 'COMPLETE' ? 'PARTIAL' : 'FAILED';
+        }
+
+        return results;
+    });
+
+    server.post('/workflows/:id/run', {
+        schema: {
+            tags: ['Workflows'],
+            summary: 'Trigger a new workflow run',
+            params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+            body: { type: 'object', properties: { payload: { type: 'object' } } }
+        },
+        preHandler: requireApiKey
+    }, async (req: any) => {
         const orchestrator = new OrchestratorAgent();
         orchestrator.startRun(req.params.id, req.body).catch(e => {
             server.log.error(e);
@@ -161,7 +297,14 @@ export const startServer = async () => {
         return await db.selectFrom('snapshots').selectAll().where('id', '=', req.params.snapId).executeTakeFirst();
     });
 
-    server.post('/runs/:runId/rollback/:snapId', { schema: { tags: ['Healing & Snapshots'], summary: 'Manual admin rollback to a snapshot' } }, async (req: any, res) => {
+    server.post('/runs/:runId/rollback/:snapId', {
+        schema: {
+            tags: ['Healing & Snapshots'],
+            summary: 'Manual admin rollback to a snapshot',
+            params: { type: 'object', required: ['runId', 'snapId'], properties: { runId: { type: 'string' }, snapId: { type: 'string' } } }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res) => {
         const snapshot = await db.selectFrom('snapshots').selectAll().where('id', '=', req.params.snapId).executeTakeFirst();
         if (!snapshot) return res.status(404).send({ error: 'Snapshot not found' });
         await executeRollback(req.params.runId, snapshot.step_index);
@@ -182,14 +325,13 @@ export const startServer = async () => {
 
 
 
-    const processHitlFeedback = async (hitlId: string, decision: 'approve' | 'reject') => {
+    const processHitlFeedback = async (hitlId: string, decision: 'approve' | 'reject', rejectionInstructions?: string) => {
         const reqRec = await db.selectFrom('hitl_requests').selectAll().where('id', '=', hitlId).executeTakeFirst();
         if (!reqRec) return;
 
         const step = await db.selectFrom('run_steps')
             .selectAll()
-            .where('run_id', '=', reqRec.run_id)
-            .where('step_index', '=', parseInt(reqRec.step_id))
+            .where('id', '=', reqRec.step_id)
             .executeTakeFirst();
 
         const run = await db.selectFrom('workflow_runs').select('workflow_id').where('id', '=', reqRec.run_id).executeTakeFirst();
@@ -211,6 +353,15 @@ export const startServer = async () => {
             }
         }
         await db.updateTable('hitl_requests').set({ status: 'RESOLVED', decision, decided_at: new Date() }).where('id', '=', hitlId).execute();
+        await publishEvent(reqRec.run_id, {
+            type: 'HITL_RESOLVED',
+            payload: {
+                runId: reqRec.run_id,
+                hitlId,
+                decision,
+                rejectionInstructions
+            }
+        });
     };
 
     server.post('/hitl/:hitlId/approve', { schema: { tags: ['HITL'], summary: 'Approve a HITL decision — resumes workflow' } }, async (req: any, res) => {
@@ -219,11 +370,19 @@ export const startServer = async () => {
     });
 
     server.post('/hitl/:hitlId/reject', { schema: { tags: ['HITL'], summary: 'Reject a HITL decision — retry with instructions' } }, async (req: any, res) => {
-        await processHitlFeedback(req.params.hitlId, 'reject');
+        const rejectionInstructions = typeof req.body?.instructions === 'string' ? req.body.instructions : undefined;
+        await processHitlFeedback(req.params.hitlId, 'reject', rejectionInstructions);
         return { status: 'REJECTED' };
     });
 
-    server.post('/hitl/:hitlId/modify', { schema: { tags: ['HITL'], summary: 'Modify HITL input and retry step' } }, async (req: any, res) => {
+    server.post('/hitl/:hitlId/modify', {
+        schema: {
+            tags: ['HITL'],
+            summary: 'Modify HITL input and retry step',
+            params: { type: 'object', required: ['hitlId'], properties: { hitlId: { type: 'string' } } },
+            body: { type: 'object', required: ['modifiedInput'], properties: { modifiedInput: { type: 'object' } } }
+        }
+    }, async (req: any, res) => {
         const { hitlId } = req.params as { hitlId: string };
         const { modifiedInput } = req.body as { modifiedInput: Record<string, unknown> };
         const hitlRequest = await db.selectFrom('hitl_requests').selectAll().where('id', '=', hitlId).executeTakeFirst();
@@ -281,7 +440,21 @@ export const startServer = async () => {
         return await db.selectFrom('integrations').selectAll().orderBy('name', 'asc').execute();
     });
 
-    server.post('/integrations', { schema: { tags: ['Integrations'], summary: 'Register a new integration' } }, async (req: any, res) => {
+    server.post('/integrations', {
+        schema: {
+            tags: ['Integrations'],
+            summary: 'Register a new integration',
+            body: {
+                type: 'object',
+                required: ['name', 'type'],
+                properties: {
+                    name: { type: 'string' },
+                    type: { type: 'string' },
+                    config: { type: 'object' }
+                }
+            }
+        }
+    }, async (req: any, res) => {
         const { name, type, config } = req.body as { name: string; type: string; config: Record<string, unknown> };
         if (!name || !type) return res.status(400).send({ error: 'name and type are required' });
         const created = await db.insertInto('integrations').values({
@@ -313,7 +486,13 @@ export const startServer = async () => {
         return updated;
     });
 
-    server.post('/webhooks/inbound', { schema: { tags: ['Integrations'], summary: 'Receive inbound webhook and route to correct pipeline' } }, async (req: any) => {
+    server.post('/webhooks/inbound', {
+        schema: {
+            tags: ['Integrations'],
+            summary: 'Receive inbound webhook and route to correct pipeline',
+            body: { type: 'object', additionalProperties: true }
+        }
+    }, async (req: any) => {
         const body = req.body as Record<string, unknown>;
         const orchestrator = new OrchestratorAgent();
         let triggeredWorkflow = 'none';
@@ -327,8 +506,24 @@ export const startServer = async () => {
         } else if (body.employee || body.onboarding) {
             triggeredWorkflow = 'employee_onboarding';
             runId = await orchestrator.startRun(triggeredWorkflow, body);
+        } else if (body.risk || body.risk_alert) {
+            const riskScore = typeof body.risk_score === 'number' ? body.risk_score : 75;
+            const category = typeof body.category === 'string' ? body.category : 'Operational';
+            const inserted = await db.insertInto('risk_flags').values({
+                risk_score: riskScore,
+                category,
+                signals: JSON.stringify(body.signals ?? body),
+                correlation_group_id: typeof body.correlation_group_id === 'string' ? body.correlation_group_id : null,
+                acknowledged_by: null
+            }).returningAll().executeTakeFirst();
+            await publishEvent('system', { type: 'RISK_ALERT', payload: { id: inserted?.id, riskScore, category } });
+            await executeTool('post_slack', JSON.stringify({
+                channel: 'risk',
+                message: `⚠️ *Risk Alert*: ${category} — score ${riskScore}\nFlag: \`${inserted?.id || 'unknown'}\``
+            }));
+            triggeredWorkflow = 'risk_alert';
         }
-        return { received: true, triggeredWorkflow, runId };
+        return { received: true, triggeredWorkflow, runId, onboarding: body.onboarding === true };
     });
 
     server.get('/security/vulnerabilities/:id', { schema: { tags: ['Security'], summary: 'Get vulnerability detail with LLaMA fix suggestion' } }, async (req: any, res) => {
@@ -337,7 +532,14 @@ export const startServer = async () => {
         return vuln;
     });
 
-    server.post('/security/vulnerabilities/:id/fix', { schema: { tags: ['Security'], summary: 'Trigger automated fix pipeline for a CVE' } }, async (req: any) => {
+    server.post('/security/vulnerabilities/:id/fix', {
+        schema: {
+            tags: ['Security'],
+            summary: 'Trigger automated fix pipeline for a CVE',
+            params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
+        },
+        preHandler: requireApiKey
+    }, async (req: any) => {
         const vuln = await db.selectFrom('vulnerabilities').selectAll().where('id', '=', req.params.id).executeTakeFirst();
         if (!vuln) return { error: 'not found' };
         const orchestrator = new OrchestratorAgent();
@@ -345,7 +547,14 @@ export const startServer = async () => {
         return { runId };
     });
 
-    server.post('/reviews/trigger', { schema: { tags: ['Security'], summary: 'Trigger a manual code review pipeline for a PR' } }, async (req: any, res) => {
+    server.post('/reviews/trigger', {
+        schema: {
+            tags: ['Security'],
+            summary: 'Trigger a manual code review pipeline for a PR',
+            body: { type: 'object', required: ['prUrl'], properties: { prUrl: { type: 'string' } } }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res) => {
         const { prUrl } = req.body as { prUrl: string };
         if (!prUrl) return res.status(400).send({ error: 'prUrl is required' });
         const orchestrator = new OrchestratorAgent();
@@ -371,12 +580,22 @@ export const startServer = async () => {
     });
 
     server.get('/compliance/report', { schema: { tags: ['Compliance & Risk'], summary: 'Get controls and gaps summary' } }, async () => {
-        const controls = await db.selectFrom('compliance_controls').selectAll().execute();
-        const gaps = await db.selectFrom('compliance_gaps').selectAll().execute();
-        return { controls, gaps };
+        try {
+            const controls = await db.selectFrom('compliance_controls').selectAll().execute();
+            const gaps = await db.selectFrom('compliance_gaps').selectAll().execute();
+            return { controls, gaps };
+        } catch (error) {
+            return { controls: [], gaps: [], unavailable: true };
+        }
     });
 
-    server.post('/risks/:id/acknowledge', { schema: { tags: ['Compliance & Risk'], summary: 'Acknowledge a live risk flag' } }, async (req: any, res) => {
+    server.post('/risks/:id/acknowledge', {
+        schema: {
+            tags: ['Compliance & Risk'],
+            summary: 'Acknowledge a live risk flag',
+            params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
+        }
+    }, async (req: any, res) => {
         const flag = await db.selectFrom('risk_flags').selectAll().where('id', '=', req.params.id).executeTakeFirst();
         if (!flag) return res.status(404).send({ error: 'Risk flag not found' });
         const updated = await db.updateTable('risk_flags')
@@ -409,7 +628,13 @@ export const startServer = async () => {
         };
     });
 
-    server.get('/analytics/runs/:period', { schema: { tags: ['Analytics'], summary: 'Run volume breakdown by day/week/month' } }, async (req: any) => {
+    server.get('/analytics/runs/:period', {
+        schema: {
+            tags: ['Analytics'],
+            summary: 'Run volume breakdown by day/week/month',
+            params: { type: 'object', required: ['period'], properties: { period: { type: 'string', enum: ['day', 'week', 'month'] } } }
+        }
+    }, async (req: any) => {
         const period = req.params.period as string;
         const days = period === 'day' ? 1 : period === 'week' ? 7 : 30;
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -502,12 +727,68 @@ export const startServer = async () => {
         }
     });
 
-    server.post('/runs/:runId/autopsy/send', { schema: { tags: ['Autopsy'], summary: 'Email autopsy report to the team' } }, async (req: any) => {
-        await publishEvent(req.params.runId as string, { type: 'AUTOPSY_SENT', payload: { destination: (req.body as { email?: string }).email ?? 'team' } });
-        return { status: 'SENT' };
+    server.post('/runs/:runId/autopsy/send', { schema: { tags: ['Autopsy'], summary: 'Email autopsy report to the team' } }, async (req: any, res) => {
+        const email = (req.body as { email?: string }).email ?? process.env.EMAIL_DEMO_RECIPIENT ?? 'team@example.com';
+        const runId = req.params.runId as string;
+
+        if (process.env.MOCK_SMTP === 'true') {
+            await publishEvent(runId, { type: 'AUTOPSY_SENT', payload: { destination: email, mocked: true } });
+            return { status: 'SENT_MOCKED' };
+        }
+
+        const report = await db.selectFrom('autopsy_reports').selectAll().where('run_id', '=', runId).executeTakeFirst();
+        if (!report) return res.status(404).send({ error: 'Report not found' });
+
+        try {
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            const content = typeof report.content_json === 'string' ? JSON.parse(report.content_json) : report.content_json as any;
+
+            const html = buildAutopsyEmailHtml(runId, content?.workflowId || 'Unknown', content?.success ?? false, content?.report ?? '');
+
+            let attachments = [];
+            if (report.pdf_path && fs.existsSync(report.pdf_path)) {
+                attachments.push({
+                    filename: `autopsy_${runId}.pdf`,
+                    content: fs.readFileSync(report.pdf_path)
+                });
+            }
+
+            const { data, error } = await resend.emails.send({
+                from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+                to: email,
+                subject: `[FlowSentrix] Autopsy Report: Run ${runId}`,
+                html,
+                attachments
+            });
+
+            if (error) {
+                console.error("Resend error:", error);
+                return res.status(500).send({ error: error.message });
+            }
+
+            await publishEvent(runId, { type: 'AUTOPSY_SENT', payload: { destination: email, resendId: data?.id } });
+            return { status: 'SENT', id: data?.id };
+        } catch (e: any) {
+            console.error("Failed to send autopsy email", e);
+            return res.status(500).send({ error: e.message });
+        }
     });
 
-    server.post('/security/scan', { schema: { tags: ['Security'], summary: 'Trigger a manual security vulnerability scan' } }, async (req: any) => {
+    server.post('/security/scan', {
+        schema: {
+            tags: ['Security'],
+            summary: 'Trigger a manual security vulnerability scan',
+            body: {
+                type: 'object',
+                required: ['repoUrl'],
+                properties: {
+                    repoUrl: { type: 'string' },
+                    scanProfile: { type: 'string' }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any) => {
         const wf = await db.selectFrom('workflow_definitions').selectAll().where('id', '=', 'security_scan_pipeline').executeTakeFirst();
         if (!wf) {
             await db.insertInto('workflow_definitions').values({
@@ -530,7 +811,21 @@ export const startServer = async () => {
         return await db.selectFrom('vulnerabilities').selectAll().orderBy('severity_score', 'desc').execute();
     });
 
-    server.post('/compliance/run', { schema: { tags: ['Compliance & Risk'], summary: 'Trigger a SOC2/ISO27001/GDPR compliance audit' } }, async (req: any) => {
+    server.post('/compliance/run', {
+        schema: {
+            tags: ['Compliance & Risk'],
+            summary: 'Trigger a SOC2/ISO27001/GDPR compliance audit',
+            body: {
+                type: 'object',
+                required: ['framework'],
+                properties: {
+                    framework: { type: 'string', enum: ['SOC2', 'ISO27001', 'GDPR'] },
+                    scope: { type: 'string' }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any) => {
         const wf = await db.selectFrom('workflow_definitions').selectAll().where('id', '=', 'compliance_audit_pipeline').executeTakeFirst();
         if (!wf) {
             await db.insertInto('workflow_definitions').values({
@@ -600,7 +895,9 @@ export const startServer = async () => {
 
     registerAllTools();
     await preWarmGroqModel();
-    await autoSeed();
+    if (process.env.AUTO_SEED === 'true') {
+        await autoSeed();
+    }
     const port = Number(process.env.PORT) || 3000;
     await server.listen({ port, host: '0.0.0.0' });
 

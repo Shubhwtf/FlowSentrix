@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS workflow_definitions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   steps JSONB NOT NULL,
   confidence_thresholds JSONB,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS workflow_definitions (
 
 CREATE TABLE IF NOT EXISTS workflow_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  workflow_id UUID REFERENCES workflow_definitions(id),
+  workflow_id TEXT REFERENCES workflow_definitions(id),
   status TEXT NOT NULL,
   trigger_payload JSONB,
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -134,4 +134,13 @@ CREATE TABLE IF NOT EXISTS audit_log (
   actor TEXT,
   payload JSONB,
   timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS employees (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  email TEXT NOT NULL,
+  department TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

@@ -17,10 +17,10 @@ export const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ onSelect, se
     }, []);
 
     return (
-        <div className="flex space-x-6 border-b border-fs-border-light dark:border-fs-border-dark mb-6">
+        <div className="flex space-x-6 border-b border-border mb-6">
             <button
                 onClick={() => onSelect('')}
-                className={`pb-3 text-sm font-medium transition-colors border-b-2 ${!selectedId ? 'border-fs-cyan text-fs-text-light dark:text-fs-text-dark' : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-300'}`}
+                className={`pb-3 text-sm font-medium transition-colors duration-80 border-b-2 ${!selectedId ? 'border-text-primary text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'}`}
             >
                 All Workflows
             </button>
@@ -28,10 +28,10 @@ export const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ onSelect, se
                 <button
                     key={wf.id}
                     onClick={() => onSelect(wf.id)}
-                    className={`pb-3 text-sm font-medium transition-colors border-b-2 flex items-center space-x-2 ${selectedId === wf.id ? 'border-fs-cyan text-fs-text-light dark:text-fs-text-dark' : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-300'}`}
+                    className={`pb-3 text-sm font-medium transition-colors duration-80 border-b-2 flex items-center space-x-2 ${selectedId === wf.id ? 'border-text-primary text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'}`}
                 >
                     <span>{wf.name}</span>
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+                    <div className="w-1.5 h-1.5 rounded-full bg-text-primary"></div>
                 </button>
             ))}
         </div>

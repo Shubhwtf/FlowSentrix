@@ -20,6 +20,7 @@ export class WorkerAgent {
     ) { }
 
     private async transition(newState: AgentState, payload?: any) {
+        console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] Step ${this.stepIndex} (${this.agentType}) → ${newState}`);
         this.state = newState;
         await publishEvent(this.runId, {
             type: `STATE_${this.state}`,
@@ -31,8 +32,10 @@ export class WorkerAgent {
 
     public async execute() {
         await this.transition('INITIALIZING');
+        console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] Loading context for Step ${this.stepIndex}...`);
         this.context = await loadContext(this.runId, this.stepIndex);
 
+        console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] Context loaded. Transitioning to RUNNING...`);
         await this.transition('RUNNING');
 
         const minimizedContext = {
@@ -43,25 +46,28 @@ export class WorkerAgent {
         };
 
         const messages = [
-            { role: 'system', content: this.systemPrompt },
+            { role: 'system', content: `${this.systemPrompt}\n\nCRITICAL DIRECTIVE: You MUST complete this task to the best of your ability using ONLY the provided tools and context. If no tools are available, synthesize a final answer based on the input. UNDER NO CIRCUMSTANCES should you state that you are unable to perform the task or that functions are insufficient.` },
             { role: 'system', content: `Context: ${JSON.stringify(minimizedContext).substring(0, 3000)}` },
             { role: 'user', content: `Task Input: ${JSON.stringify(this.inputPayload).substring(0, 1000)}` }
         ];
 
         try {
-            const { finalAnswer, conversationHistory } = await runLLaMALoop(messages, this.allowedTools, { runId: this.runId, stepIndex: this.stepIndex });
+            console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] Requesting LLM completion...`);
+            const taskType = this.agentType === 'TriageAgent' ? 'triage' : 'general';
+            const { finalAnswer, conversationHistory } = await runLLaMALoop(messages, this.allowedTools, { runId: this.runId, stepIndex: this.stepIndex }, taskType);
+            console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] LLM loop finished. Answer length: ${finalAnswer.length}. Transitioning to SCORING...`);
 
             await this.transition('SCORING');
             const scoreMessages = [
                 ...conversationHistory,
-                { role: 'user', content: 'Rate the confidence of this output on a scale of 0-100. Return ONLY a JSON object with { "score": number, "reasoning": "string" }' }
+                { role: 'user', content: 'Rate the confidence of this output on a scale of 0-100. Return ONLY a JSON object with { "score": number, "reasoning": "string", "suggestedFix": "string | null" }' }
             ];
-            const { finalAnswer: rawScoreAnswer } = await runLLaMALoop(scoreMessages, []);
-            let scoreData = { score: 100, reasoning: "Default" };
+            const { finalAnswer: rawScoreAnswer } = await runLLaMALoop(scoreMessages, [], undefined, 'confidence_scoring');
+            let scoreData = { score: 100, reasoning: "Default", suggestedFix: null };
             try {
-                const cleaned = rawScoreAnswer.replace(/```json/g, '').replace(/```/g, '');
-                scoreData = JSON.parse(cleaned);
+                scoreData = JSON.parse(rawScoreAnswer);
             } catch (e) {
+                console.warn("Failed to parse JSON score answer", rawScoreAnswer);
             }
 
             const workflow = await db.selectFrom('workflow_definitions').selectAll().where('id', '=', this.context.workflowId).executeTakeFirst();

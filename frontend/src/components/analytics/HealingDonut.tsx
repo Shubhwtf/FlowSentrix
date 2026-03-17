@@ -14,13 +14,23 @@ export const HealingDonut: React.FC = () => {
 
     useEffect(() => {
         API.analytics.healing()
-            .then((d) => setData(d as HealingData))
+            .then((d) => {
+                if (typeof d === 'object' && d !== null) {
+                    const total = typeof d.total === 'number' ? d.total : 0;
+                    const resolved = typeof d.resolved === 'number' ? d.resolved : 0;
+                    const escalated = typeof d.escalated === 'number' ? d.escalated : 0;
+                    const rollbackFrequency = typeof d.rollbackFrequency === 'number' ? d.rollbackFrequency : 0;
+                    setData({ total, resolved, escalated, rollbackFrequency });
+                } else {
+                    setData({ total: 0, resolved: 0, escalated: 0, rollbackFrequency: 0 });
+                }
+            })
             .catch(console.error)
             .finally(() => setIsLoading(false));
     }, []);
 
     const segments = data ? [
-        { label: 'RESOLVED', value: data.resolved, color: '#00D4FF' },
+        { label: 'RESOLVED', value: data.resolved, color: 'var(--text-primary)' },
         { label: 'ESCALATED', value: data.escalated, color: '#f59e0b' },
         { label: 'ROLLBACK', value: data.rollbackFrequency, color: '#f97316' },
     ].filter(s => s.value > 0) : [];

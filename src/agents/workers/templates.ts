@@ -8,7 +8,7 @@ export const USE_CASE_1_PIPELINE = [
     {
         index: 2,
         agentType: 'CRMWorker',
-        systemPrompt: 'Read and write to HR CRM system to create employee profile. Use "write_db".',
+        systemPrompt: 'Create an employee profile in the database. Use only write_db. You MUST call write_db with {"sql":"INSERT INTO employees (name, role, email, department) VALUES (...)"} using the employee fields from the input. Return a short JSON summary after the write succeeds.',
         allowedTools: ['write_db']
     },
     {
@@ -32,8 +32,8 @@ export const USE_CASE_1_PIPELINE = [
     {
         index: 6,
         agentType: 'EmailWorker',
-        systemPrompt: 'Send pack to new hire. Use "post_slack".',
-        allowedTools: ['post_slack']
+        systemPrompt: 'Send onboarding packet to new hire via email. Use "send_onboarding_email". Do NOT use any other tool.',
+        allowedTools: ['send_onboarding_email']
     }
 ];
 
@@ -47,12 +47,12 @@ export const USE_CASE_2_PIPELINE = [
 ];
 
 export const USE_CASE_3_PIPELINE = [
-    { index: 1, agentType: 'DiffAgent', systemPrompt: 'Fetch PR diff.', allowedTools: ['call_api'] },
+    { index: 1, agentType: 'DiffAgent', systemPrompt: 'Fetch PR diff using read_pr_diff.', allowedTools: ['read_pr_diff'] },
     { index: 2, agentType: 'SecurityAgent', systemPrompt: 'Scan for OWASP.', allowedTools: [] },
     { index: 3, agentType: 'LogicAgent', systemPrompt: 'Understand intent.', allowedTools: [] },
     { index: 4, agentType: 'StyleAgent', systemPrompt: 'Check styles.', allowedTools: [] },
     { index: 5, agentType: 'SummaryAgent', systemPrompt: 'Aggregate findings.', allowedTools: [] },
-    { index: 6, agentType: 'CommentAgent', systemPrompt: 'Post inline comments.', allowedTools: ['call_api'] }
+    { index: 6, agentType: 'CommentAgent', systemPrompt: 'Post inline comments using post_review_comment.', allowedTools: ['post_review_comment'] }
 ];
 
 export const USE_CASE_4_PIPELINE = [

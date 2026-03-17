@@ -66,7 +66,8 @@ export const LiveDashboard: React.FC = () => {
 
             <div className="flex-1 flex flex-col min-h-0 pb-4">
                 <RunTimeline runState={runState} />
-                {runId ? <RunDetailsTabs runId={runId} allEvents={allEvents} /> : <EventLog events={allEvents} />}
+                {runId && <RunDetailsTabs runId={runId} allEvents={allEvents} />}
+                <EventLog events={allEvents} />
                 {runId && <CollapsibleAutopsy runId={runId} />}
             </div>
         </div>
