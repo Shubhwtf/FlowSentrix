@@ -1,0 +1,31 @@
+{
+  "name": "flowsentrix-docs-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource/geist": "^5.2.5",
+    "@fontsource/geist-mono": "^5.2.5",
+    "framer-motion": "^12.23.12",
+    "fuse.js": "^7.1.0",
+    "lucide-react": "^0.542.0",
+    "mermaid": "^11.12.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-syntax-highlighter": "^15.6.6"
+  },
+  "devDependencies": {
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "3.4.17",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
+  }
+}
+

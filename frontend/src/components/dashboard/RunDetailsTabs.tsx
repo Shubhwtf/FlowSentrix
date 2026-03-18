@@ -92,7 +92,7 @@ export const RunDetailsTabs: React.FC<{ runId: string; allEvents: any[] }> = ({ 
                 {tabs.map(t => (
                     <button
                         key={t.id}
-                        onClick={() => setActiveTab(t.id as any)}
+                        onClick={() => setActiveTab(t.id)}
                         className={`flex items-center space-x-2 px-4 py-2.5 text-[10px] uppercase tracking-widest font-bold transition-colors whitespace-nowrap border-b-2 ${activeTab === t.id ? 'border-fs-cyan text-fs-text-light dark:text-fs-text-dark bg-white/5 dark:bg-white/5' : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
                     >
                         <t.icon size={12} />

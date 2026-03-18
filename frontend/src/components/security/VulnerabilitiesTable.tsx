@@ -93,8 +93,19 @@ export const VulnerabilitiesTable: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                        {v.status === 'open' && <button className="text-xs bg-fs-cyan text-black px-3 py-1 font-bold" onClick={() => handleFix(v.id)}>Fix</button>}
-                                        {v.status === 'fix-generated' && <button className="text-xs bg-purple-500 text-white px-3 py-1 font-bold">PR</button>}
+                                        {v.status === 'open' && (
+                                            <button
+                                                className="px-3 py-1 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity"
+                                                onClick={() => handleFix(v.id)}
+                                            >
+                                                Fix
+                                            </button>
+                                        )}
+                                        {v.status === 'fix-generated' && (
+                                            <button className="px-3 py-1 font-mono text-xs font-bold uppercase tracking-widest bg-purple-500 text-white hover:opacity-80 transition-opacity">
+                                                PR
+                                            </button>
+                                        )}
                                         {v.pr_url && <a href={v.pr_url} target="_blank" rel="noreferrer" className="text-xs text-gray-500 underline ml-2">View PR</a>}
                                     </td>
                                 </tr>

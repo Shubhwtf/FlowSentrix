@@ -115,7 +115,7 @@ export const ComplianceView: React.FC = () => {
                     <button
                         onClick={handleGenerate}
                         disabled={generating}
-                        className="flex items-center space-x-2 text-xs font-mono bg-fs-cyan text-black px-4 py-1.5 font-bold hover:bg-opacity-90 transition-opacity disabled:opacity-60"
+                        className="flex items-center space-x-2 px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity disabled:opacity-50"
                     >
                         {generating ? <Loader2 size={12} className="animate-spin" /> : <PlayCircle size={12} />}
                         <span>{generating ? 'Running Audit…' : 'Generate New Report'}</span>

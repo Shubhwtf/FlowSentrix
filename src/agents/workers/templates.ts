@@ -2,7 +2,7 @@ export const USE_CASE_1_PIPELINE = [
     {
         index: 1,
         agentType: 'EmailWorker',
-        systemPrompt: 'Extract structured fields from unstructured email content. Use tool "read_email". Return JSON output.',
+        systemPrompt: 'Extract structured employee fields for onboarding. If Task Input contains employee fields already, return ONLY JSON {"name":string,"role":string,"email":string,"department":string}. Otherwise, call read_email with {"mailboxId":"demo"} exactly once, then extract and return the same JSON.',
         allowedTools: ['read_email']
     },
     {
@@ -14,19 +14,19 @@ export const USE_CASE_1_PIPELINE = [
     {
         index: 3,
         agentType: 'ComplianceWorker',
-        systemPrompt: 'Call background check APIs. Use "call_api".',
-        allowedTools: ['call_api']
+        systemPrompt: 'Perform a demo-safe background check. Do NOT call any external APIs. Return ONLY JSON {"backgroundCheck":"PASSED","provider":"demo","referenceId":string}.',
+        allowedTools: []
     },
     {
         index: 4,
         agentType: 'ITWorker',
-        systemPrompt: 'Provision accounts via APIs. Use "call_api". Expect format mismatches and fail gracefully if observed.',
-        allowedTools: ['call_api']
+        systemPrompt: 'Provision accounts in demo mode without external APIs. Return ONLY JSON {"accounts":[{"system":"google_workspace","status":"PROVISIONED"},{"system":"slack","status":"PROVISIONED"}]}.',
+        allowedTools: []
     },
     {
         index: 5,
         agentType: 'DocWorker',
-        systemPrompt: 'Call "generate_document" from structured data and output PDF.',
+        systemPrompt: 'Generate an onboarding PDF. You MUST call generate_document exactly once with {"template":"employee_onboarding_packet","format":"pdf","data":{...}} where data includes the employee fields. After the tool returns, output ONLY JSON {"filename":string,"fileUrl":string}.',
         allowedTools: ['generate_document']
     },
     {
@@ -38,12 +38,12 @@ export const USE_CASE_1_PIPELINE = [
 ];
 
 export const USE_CASE_2_PIPELINE = [
-    { index: 1, agentType: 'TriageAgent', systemPrompt: 'Assess CVE severity.', allowedTools: ['call_api'] },
-    { index: 2, agentType: 'ContextAgent', systemPrompt: 'Read vulnerable file.', allowedTools: ['read_file'] },
-    { index: 3, agentType: 'FixAgent', systemPrompt: 'Generate code fix.', allowedTools: [] },
-    { index: 4, agentType: 'ValidationAgent', systemPrompt: 'Run CI tests.', allowedTools: ['call_api'] },
-    { index: 5, agentType: 'PRAgent', systemPrompt: 'Open PR.', allowedTools: ['open_pr'] },
-    { index: 6, agentType: 'NotifyAgent', systemPrompt: 'Notify Slack.', allowedTools: ['post_slack'] },
+    { index: 1, agentType: 'TriageAgent', systemPrompt: 'Assess CVE severity and summarize impact. Return JSON {"severity":"LOW|MEDIUM|HIGH|CRITICAL","summary":string,"shouldFix":boolean}.', allowedTools: [] },
+    { index: 2, agentType: 'ContextAgent', systemPrompt: 'You MUST call read_file exactly once to fetch the affected file from GitHub. Input provides repo_owner, repo_name, affected_file. After the tool returns, output ONLY JSON {"repo":string,"owner":string,"filePath":string,"sha":string,"content":string}.', allowedTools: ['read_file'] },
+    { index: 3, agentType: 'FixAgent', systemPrompt: 'Generate a safe minimal patch for the file content to remediate the issue. Input contains JSON from ContextAgent. Output ONLY JSON {"repo":string,"filePath":string,"fileSha":string,"originalContent":string,"patchedContent":string,"title":string,"body":string,"commitMessage":string}.', allowedTools: [] },
+    { index: 4, agentType: 'ValidationAgent', systemPrompt: 'Validate the patch logically. Output ONLY JSON {"ok":boolean,"notes":string}.', allowedTools: [] },
+    { index: 5, agentType: 'PRAgent', systemPrompt: 'You MUST call open_pr exactly once. Input contains JSON from FixAgent. Call open_pr with {repo,filePath,fileContent, fileSha, title, body, commitMessage}. After tool returns, output ONLY JSON {"prUrl":string,"prNumber":number,"branchName":string}.', allowedTools: ['open_pr'] },
+    { index: 6, agentType: 'NotifyAgent', systemPrompt: 'Post the PR URL to Slack security channel. Input contains JSON from PRAgent. You MUST call post_slack. Message must include prUrl.', allowedTools: ['post_slack'] },
 ];
 
 export const USE_CASE_3_PIPELINE = [

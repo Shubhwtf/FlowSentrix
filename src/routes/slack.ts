@@ -40,11 +40,18 @@ export default async function slackRoutes(fastify: FastifyInstance) {
         // HITL Review: Slack will automatically handle the URL redirect if it's a URL button.
         // If it's just a value button, handle it here.
         if (action.action_id === 'risk_acknowledge') {
-            const runId = action.value;
-            // Update risk db flag (mocking this as a transaction log for now if table doesn't exist)
+            const riskFlagId = action.value;
+            await db.updateTable('risk_flags')
+                .set({
+                    acknowledged_by: payload.user.id || 'slack_user',
+                    acknowledged_at: new Date()
+                })
+                .where('id', '=', riskFlagId)
+                .execute();
+
             await db.insertInto('audit_log').values({
                 entity_type: 'risk_flag',
-                entity_id: runId,
+                entity_id: riskFlagId,
                 event_type: 'RISK_ACKNOWLEDGED',
                 actor: payload.user.id || 'slack_user',
                 payload: JSON.stringify({ slack_user: payload.user.username })

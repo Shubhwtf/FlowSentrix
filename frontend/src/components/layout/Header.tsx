@@ -17,8 +17,6 @@ export const Header: React.FC = () => {
         <header className="sticky top-0 z-50 h-12 w-full bg-background border-b border-border flex items-center justify-between px-6">
             <div className="flex items-center gap-2">
                 <span className="text-[15px] font-bold tracking-tight">FlowSentrix</span>
-                <span className="text-text-muted">/</span>
-                <span className="font-mono text-[11px] text-text-secondary uppercase">ARIA 2025</span>
             </div>
 
             <div className="flex items-center gap-2 absolute left-1/2 -translate-x-1/2">

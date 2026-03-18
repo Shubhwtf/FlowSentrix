@@ -75,7 +75,7 @@ export const NewRunModal: React.FC<NewRunModalProps> = ({ isOpen, onClose, onRun
                     <button
                         onClick={handleSubmit}
                         disabled={isSubmitting}
-                        className="px-6 py-2 bg-fs-cyan text-black font-medium hover:bg-opacity-90 disabled:opacity-50 transition-opacity"
+                        className="px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                     >
                         {isSubmitting ? 'Starting...' : 'Execute'}
                     </button>

@@ -75,7 +75,7 @@ export const registerAllTools = () => {
     registerTool({
         name: 'read_email',
         description: 'Read emails from Microsoft Graph API',
-        schema: z.object({ mailboxId: z.string(), filters: z.record(z.string(), z.any()).optional() }),
+        schema: z.object({ mailboxId: z.string().default('demo'), filters: z.record(z.string(), z.any()).optional() }),
         execute: async ({ mailboxId }, context) => {
             if (!context) return [];
             const run = await db.selectFrom('workflow_runs').selectAll().where('id', '=', context.runId).executeTakeFirst();
@@ -170,7 +170,7 @@ export const registerAllTools = () => {
             body: z.string(),
             commitMessage: z.string()
         }),
-        execute: async ({ repo, filePath, fileContent, fileSha, title, body, commitMessage }) => {
+        execute: async ({ repo, filePath, fileContent, fileSha, title, body, commitMessage }, context) => {
             const isMock = process.env.MOCK_GITHUB === 'true';
             if (isMock) return { prUrl: `https://github.com/${repo}/pull/101`, prNumber: 101, branchName: 'mock-branch', title };
 
@@ -193,6 +193,26 @@ export const registerAllTools = () => {
                 const { data: pr } = await octokit.pulls.create({
                     owner, repo: realRepo, title, body, head: branchName, base: 'main'
                 });
+
+                if (context?.runId) {
+                    try {
+                        const run = await db.selectFrom('workflow_runs').selectAll().where('id', '=', context.runId).executeTakeFirst();
+                        const payload = run?.trigger_payload
+                            ? (typeof run.trigger_payload === 'string' ? JSON.parse(run.trigger_payload) : run.trigger_payload)
+                            : {};
+                        const vulnId = typeof (payload as any).vulnerability_id === 'string'
+                            ? (payload as any).vulnerability_id
+                            : typeof (payload as any).id === 'string'
+                                ? (payload as any).id
+                                : null;
+                        if (vulnId) {
+                            await db.updateTable('vulnerabilities')
+                                .set({ pr_url: pr.html_url, status: 'pr_open' })
+                                .where('id', '=', vulnId)
+                                .execute();
+                        }
+                    } catch { }
+                }
 
                 return { prNumber: pr.number, prUrl: pr.html_url, branchName, title };
             } catch (error: any) {
@@ -330,6 +350,24 @@ export const registerAllTools = () => {
                 blocks = [
                     { type: 'header', text: { type: 'plain_text', text: `🔴 CVE Alert` } },
                     { type: 'section', text: { type: 'mrkdwn', text: message } },
+                    baseContext
+                ];
+            } else if (channel.includes('risk') || message.includes('*Risk Alert*')) {
+                const idMatch = message.match(/Flag:\s*`([^`]+)`/);
+                const riskId = idMatch?.[1];
+                blocks = [
+                    { type: 'header', text: { type: 'plain_text', text: `⚠️ Risk Alert` } },
+                    { type: 'section', text: { type: 'mrkdwn', text: message } },
+                    ...(riskId ? [{
+                        type: 'actions',
+                        elements: [{
+                            type: 'button',
+                            text: { type: 'plain_text', text: 'Acknowledge' },
+                            style: 'primary',
+                            value: riskId,
+                            action_id: 'risk_acknowledge'
+                        }]
+                    }] : []),
                     baseContext
                 ];
             }

@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
+import rateLimit from '@fastify/rate-limit';
 import { db, initializeDatabase } from './db/client';
 import { OrchestratorAgent } from './agents/OrchestratorAgent';
 import { preWarmGroqModel } from './agents/base/GroqClient';
@@ -23,6 +24,11 @@ export const server = Fastify({ logger: true });
 
 export const startServer = async () => {
     await initializeDatabase();
+    await server.register(rateLimit, {
+        global: true,
+        max: Math.max(30, Number(process.env.RATE_LIMIT_MAX || '120')),
+        timeWindow: process.env.RATE_LIMIT_WINDOW_MS ? Number(process.env.RATE_LIMIT_WINDOW_MS) : 60_000,
+    });
     await server.register(swagger, {
         swagger: {
             info: {
@@ -61,6 +67,7 @@ export const startServer = async () => {
             root: path.join(__dirname, '../../frontend/dist'),
             prefix: '/'
         });
+        await server.register(fastifyStatic, { root: path.join(__dirname, '../../frontend/docs-site/dist'), prefix: '/docs/', decorateReply: false });
         server.get('/*', { schema: { hide: true } }, (_req, reply) => {
             reply.sendFile('index.html');
         });
@@ -499,7 +506,38 @@ export const startServer = async () => {
         let runId: string | null = null;
         if (body.cve || body.vulnerability) {
             triggeredWorkflow = 'security_scan_pipeline';
-            runId = await orchestrator.startRun(triggeredWorkflow, body);
+            const cveId = typeof body.cve_id === 'string'
+                ? body.cve_id
+                : typeof body.cve === 'string'
+                    ? body.cve
+                    : typeof (body as any).vulnerability?.cve_id === 'string'
+                        ? (body as any).vulnerability.cve_id
+                        : 'CVE-UNKNOWN';
+            const severity = typeof body.severity_score === 'number'
+                ? body.severity_score
+                : typeof (body as any).vulnerability?.severity_score === 'number'
+                    ? (body as any).vulnerability.severity_score
+                    : null;
+            const repo = typeof body.repo === 'string'
+                ? body.repo
+                : typeof (body as any).vulnerability?.repo === 'string'
+                    ? (body as any).vulnerability.repo
+                    : null;
+            const filePath = typeof body.file_path === 'string'
+                ? body.file_path
+                : typeof (body as any).vulnerability?.file_path === 'string'
+                    ? (body as any).vulnerability.file_path
+                    : null;
+
+            const inserted = await db.insertInto('vulnerabilities').values({
+                cve_id: cveId,
+                severity_score: severity,
+                repo,
+                file_path: filePath,
+                status: 'open'
+            }).returningAll().executeTakeFirst();
+
+            runId = await orchestrator.startRun(triggeredWorkflow, { ...body, vulnerability_id: inserted?.id });
         } else if (body.pull_request) {
             triggeredWorkflow = 'cloud_infra_provisioning';
             runId = await orchestrator.startRun(triggeredWorkflow, body);

@@ -74,19 +74,61 @@ export const buildOnboardingEmailHtml = (name: string, role: string) => `
 <head>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f5; padding: 20px; }
-  .container { max-width: 600px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; border: 1px solid #e4e4e7; text-align: center; }
-  h1 { color: #18181b; font-size: 28px; margin-bottom: 10px; }
-  p { font-size: 16px; color: #52525b; line-height: 1.5; margin-bottom: 20px; }
-  .btn { display: inline-block; background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; }
+  .container { max-width: 640px; margin: 0 auto; background: #ffffff; padding: 28px; border-radius: 10px; border: 1px solid #e4e4e7; }
+  h1 { color: #18181b; font-size: 24px; margin: 0 0 8px; }
+  .sub { font-size: 14px; color: #52525b; margin: 0 0 18px; line-height: 1.6; }
+  .card { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 16px; margin: 14px 0; }
+  .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #71717a; margin-bottom: 8px; font-weight: 700; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .pill { display: inline-block; background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 999px; padding: 6px 10px; font-size: 13px; color: #18181b; }
+  ul { margin: 10px 0 0; padding-left: 18px; color: #3f3f46; font-size: 14px; line-height: 1.7; }
+  li { margin: 6px 0; }
+  a { color: #2563eb; }
+  .btn { display: inline-block; background-color: #111827; color: #ffffff !important; padding: 12px 16px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 14px; }
+  .btnRow { margin-top: 14px; }
+  .footer { margin-top: 18px; color: #71717a; font-size: 12px; line-height: 1.6; }
 </style>
 </head>
 <body>
   <div class="container">
-    <h1>Welcome to the team, ${name}! 🎉</h1>
-    <p>We're thrilled to have you join us as our newest <strong>${role}</strong>.</p>
-    <p>Your AI onboarding agent has provisioned your accounts, set up your repositories, and prepared your starter materials. You can find your onboarding packet attached to this email.</p>
-    <br>
-    <a href="https://example.com/getting-started" class="btn">View Onboarding Dashboard</a>
+    <h1>Welcome aboard, ${name}</h1>
+    <p class="sub">
+      Your onboarding is ready. This email includes the key next steps and your starter checklist.
+    </p>
+
+    <div class="card">
+      <div class="label">Role</div>
+      <div class="row">
+        <span class="pill"><strong>${role}</strong></span>
+        <span class="pill">Status: <strong>Provisioning complete</strong></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">First-day checklist</div>
+      <ul>
+        <li>Open the attached onboarding packet and review your team + access details.</li>
+        <li>Log in to Slack and introduce yourself in <strong>#introductions</strong>.</li>
+        <li>Confirm access to email + calendar and set your working hours.</li>
+        <li>Schedule your 15-minute setup call with your manager.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="label">Helpful links</div>
+      <ul>
+        <li>Getting started: <a href="https://example.com/getting-started">https://example.com/getting-started</a></li>
+        <li>Company handbook: <a href="https://example.com/handbook">https://example.com/handbook</a></li>
+        <li>IT support: <a href="https://example.com/it">https://example.com/it</a></li>
+      </ul>
+      <div class="btnRow">
+        <a href="https://example.com/getting-started" class="btn">Open onboarding dashboard</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      If anything looks wrong (missing access, wrong role/title, or incorrect details), reply to this email and the ops team will fix it.
+    </div>
   </div>
 </body>
 </html>

@@ -41,6 +41,7 @@ const navGroups = [
 
 export const Sidebar: React.FC = () => {
     const [hitlCount, setHitlCount] = useState(0);
+    const docsUrl = import.meta.env.VITE_DOCS_URL || 'http://localhost:5174/docs';
 
     useEffect(() => {
         const fetchCount = () => {
@@ -87,7 +88,12 @@ export const Sidebar: React.FC = () => {
             </nav>
 
             <div className="p-3 mb-4">
-                <a href="/docs" target="_blank" rel="noreferrer" className="h-10 px-3 text-[13px] font-medium flex items-center gap-3 text-text-secondary hover:bg-surface-elevated hover:text-text-primary border-l-2 border-l-transparent">
+                <a
+                    href={docsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="h-10 px-3 text-[13px] font-medium flex items-center gap-3 text-text-secondary hover:bg-surface-elevated hover:text-text-primary border-l-2 border-l-transparent"
+                >
                     <ExternalLink size={15} strokeWidth={1.5} />
                     <span>API Docs</span>
                 </a>

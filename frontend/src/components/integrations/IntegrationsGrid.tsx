@@ -48,7 +48,9 @@ export const IntegrationsGrid: React.FC = () => {
         <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex justify-between items-center mb-2">
                 <h1 className="text-2xl font-bold tracking-tight">System Integrations</h1>
-                <button className="text-xs font-mono uppercase bg-fs-cyan text-black px-4 py-1.5 font-bold hover:bg-opacity-90 transition-opacity">Add Integration</button>
+                <button className="px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity">
+                    Add Integration
+                </button>
             </div>
 
             <div className="grid grid-cols-3 gap-6">

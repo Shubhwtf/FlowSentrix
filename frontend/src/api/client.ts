@@ -30,6 +30,10 @@ export const API = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }) as Promise<WorkflowDefinition>,
+        delete: (id: string, apiKey?: string) => fetchWithTimeout(`/workflows/${id}`, {
+            method: 'DELETE',
+            headers: apiKey ? { 'x-api-key': apiKey } : undefined
+        }),
         run: (id: string, payload: any) => fetchWithTimeout(`/workflows/${id}/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

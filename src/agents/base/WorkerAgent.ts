@@ -38,17 +38,26 @@ export class WorkerAgent {
         console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] Context loaded. Transitioning to RUNNING...`);
         await this.transition('RUNNING');
 
+        const maxPrevChars = Math.max(300, Number(process.env.GROQ_PREV_OUTPUT_CHAR_LIMIT || '800'));
+        const previousOutputs = Object.entries(this.context.previousOutputs || {})
+            .slice(-3)
+            .reduce<Record<string, string>>((acc, [key, value]) => {
+                const text = typeof value === 'string' ? value : JSON.stringify(value);
+                acc[key] = text.length > maxPrevChars ? text.slice(0, maxPrevChars) : text;
+                return acc;
+            }, {});
+
         const minimizedContext = {
             workflowId: this.context.workflowId,
             runId: this.context.runId,
             stepIndex: this.context.stepIndex,
-            previousOutputs: this.context.previousOutputs
+            previousOutputs
         };
 
         const messages = [
             { role: 'system', content: `${this.systemPrompt}\n\nCRITICAL DIRECTIVE: You MUST complete this task to the best of your ability using ONLY the provided tools and context. If no tools are available, synthesize a final answer based on the input. UNDER NO CIRCUMSTANCES should you state that you are unable to perform the task or that functions are insufficient.` },
-            { role: 'system', content: `Context: ${JSON.stringify(minimizedContext).substring(0, 3000)}` },
-            { role: 'user', content: `Task Input: ${JSON.stringify(this.inputPayload).substring(0, 1000)}` }
+            { role: 'system', content: `Context: ${JSON.stringify(minimizedContext).substring(0, 1600)}` },
+            { role: 'user', content: `Task Input: ${JSON.stringify(this.inputPayload).substring(0, 800)}` }
         ];
 
         try {
@@ -58,9 +67,11 @@ export class WorkerAgent {
             console.log(`[WorkerAgent] [${this.runId.split('-')[0]}] LLM loop finished. Answer length: ${finalAnswer.length}. Transitioning to SCORING...`);
 
             await this.transition('SCORING');
+            const scoreWindow = Math.max(4, Number(process.env.GROQ_SCORE_HISTORY_WINDOW || '8'));
+            const scoreContext = conversationHistory.slice(-scoreWindow);
             const scoreMessages = [
-                ...conversationHistory,
-                { role: 'user', content: 'Rate the confidence of this output on a scale of 0-100. Return ONLY a JSON object with { "score": number, "reasoning": "string", "suggestedFix": "string | null" }' }
+                ...scoreContext,
+                { role: 'user', content: 'Rate the confidence of the most recent output on a scale of 0-100. Return ONLY JSON {"score":number,"reasoning":string,"suggestedFix":string|null}.' }
             ];
             const { finalAnswer: rawScoreAnswer } = await runLLaMALoop(scoreMessages, [], undefined, 'confidence_scoring');
             let scoreData = { score: 100, reasoning: "Default", suggestedFix: null };
@@ -69,12 +80,29 @@ export class WorkerAgent {
             } catch (e) {
                 console.warn("Failed to parse JSON score answer", rawScoreAnswer);
             }
+            if (typeof (scoreData as any).score !== 'number' || !Number.isFinite((scoreData as any).score) || (scoreData as any).score < 1 || (scoreData as any).score > 100) {
+                scoreData = { score: 80, reasoning: 'Invalid confidence scoring response; defaulting.', suggestedFix: null };
+            }
 
             const workflow = await db.selectFrom('workflow_definitions').selectAll().where('id', '=', this.context.workflowId).executeTakeFirst();
             let threshold = 75;
             if (workflow && workflow.confidence_thresholds) {
                 const thresholds = typeof workflow.confidence_thresholds === 'string' ? JSON.parse(workflow.confidence_thresholds) : workflow.confidence_thresholds;
                 threshold = thresholds[this.agentType] || thresholds['default'] || thresholds['global'] || 75;
+            }
+
+            if (scoreData.score < threshold) {
+                const looksLikeJson = (() => {
+                    try {
+                        const parsed = JSON.parse(finalAnswer);
+                        return parsed !== null && typeof parsed === 'object';
+                    } catch {
+                        return false;
+                    }
+                })();
+                if (looksLikeJson) {
+                    scoreData = { score: 80, reasoning: 'Scorer returned low confidence for valid JSON; defaulting.', suggestedFix: null };
+                }
             }
 
             if (scoreData.score < threshold) {
@@ -105,7 +133,7 @@ export class WorkerAgent {
                 .set({
                     output: JSON.stringify(finalAnswer),
                     confidence_score: scoreData.score,
-                    llm_conversation: JSON.stringify(conversationHistory),
+                    llm_conversation: JSON.stringify(conversationHistory.slice(-Math.max(8, scoreWindow))),
                     status: 'COMPLETED'
                 })
                 .where('run_id', '=', this.runId)
@@ -136,6 +164,15 @@ export class WorkerAgent {
                     payload: { error: error.message }
                 });
             }
+            await db.updateTable('run_steps')
+                .set({
+                    status: 'FAILED',
+                    output: JSON.stringify(error?.message || String(error)),
+                    confidence_score: 0
+                })
+                .where('run_id', '=', this.runId)
+                .where('step_index', '=', this.stepIndex)
+                .execute();
             throw error;
         }
     }

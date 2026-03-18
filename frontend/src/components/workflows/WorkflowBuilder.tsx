@@ -354,12 +354,16 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
     const [isSaving, setIsSaving] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
     const [jsonOpen, setJsonOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
+    const [importText, setImportText] = useState('');
+    const [importError, setImportError] = useState('');
     const [errorText, setErrorText] = useState('');
     const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
     const [connectionDraft, setConnectionDraft] = useState<{ sourceNodeId: string; x: number; y: number } | null>(null);
     const [draggingNode, setDraggingNode] = useState<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
     const [panning, setPanning] = useState<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
     const canvasRef = useRef<HTMLDivElement>(null);
+    const nodeElsRef = useRef<Record<string, HTMLDivElement | null>>({});
     const zoomRef = useRef(state.zoom);
     const panRef = useRef(state.panOffset);
 
@@ -394,6 +398,9 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
         setErrorText('');
         setSelectedEdge(null);
         setJsonOpen(false);
+        setImportOpen(false);
+        setImportText('');
+        setImportError('');
     }, [isOpen, initialData]);
 
     useEffect(() => {
@@ -436,6 +443,96 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
     }, [isOpen, draggingNode, connectionDraft, state.panOffset.x, state.panOffset.y, state.zoom, panning]);
 
     if (!isOpen) return null;
+
+    const isRecord = (value: unknown): value is Record<string, unknown> => {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    const stateFromImportedConfig = (raw: unknown): BuilderState | null => {
+        if (!isRecord(raw)) return null;
+        const name = typeof raw.name === 'string' ? raw.name : '';
+        const rawSteps = raw.steps;
+        if (!Array.isArray(rawSteps)) return null;
+        const rawThresholds = isRecord(raw.confidence_thresholds)
+            ? raw.confidence_thresholds
+            : {};
+        const thresholds: Record<string, number> = {};
+        Object.entries(rawThresholds).forEach(([key, value]) => {
+            if (typeof value === 'number') thresholds[key] = value;
+        });
+        const trigger = initialTriggerNode();
+        const triggerConfig = isRecord(raw.trigger) ? raw.trigger : {};
+        const triggerTypeValue = typeof triggerConfig.type === 'string' ? triggerConfig.type : 'Manual';
+        const triggerType = triggerTypeValue === 'Manual' || triggerTypeValue === 'Webhook' || triggerTypeValue === 'Schedule' || triggerTypeValue === 'Email Arrival' || triggerTypeValue === 'GitHub Event' || triggerTypeValue === 'CVE Detected'
+            ? triggerTypeValue
+            : 'Manual';
+        const triggerConfigValue = isRecord(triggerConfig.config)
+            ? triggerConfig.config
+            : {};
+        const triggerConfigStrings: Record<string, string> = {};
+        Object.entries(triggerConfigValue).forEach(([key, value]) => {
+            if (typeof value === 'string') triggerConfigStrings[key] = value;
+        });
+        const nodes: WorkflowNode[] = [
+            {
+                ...trigger,
+                triggerType,
+                triggerConfig: triggerConfigStrings
+            }
+        ];
+        rawSteps.forEach((step, index) => {
+            if (typeof step !== 'object' || step === null || Array.isArray(step)) return;
+            const agentType = typeof step.agentType === 'string' ? step.agentType : `Step${index + 1}`;
+            const stepThreshold = typeof step.confidenceThreshold === 'number'
+                ? step.confidenceThreshold
+                : typeof thresholds[String(index)] === 'number'
+                    ? thresholds[String(index)]
+                    : typeof thresholds.global === 'number'
+                        ? thresholds.global
+                        : 90;
+            const integrations = Array.isArray(step.integrations) ? step.integrations.filter((v: unknown) => typeof v === 'string') : [];
+            nodes.push({
+                id: makeId(),
+                agentType,
+                category: getCategory(agentType),
+                position: { x: 400, y: 80 + (index + 1) * 160 },
+                confidenceThreshold: stepThreshold,
+                integrations,
+                inputMappings: [],
+                outputMappings: []
+            });
+        });
+        const edges: Edge[] = [];
+        for (let index = 0; index < nodes.length - 1; index += 1) {
+            edges.push({ sourceNodeId: nodes[index].id, targetNodeId: nodes[index + 1].id });
+        }
+        return {
+            nodes,
+            edges,
+            selectedNodeId: null,
+            zoom: 1,
+            panOffset: { x: 0, y: 0 },
+            workflowName: name,
+            isDirty: true
+        };
+    };
+
+    const applyImport = () => {
+        setImportError('');
+        try {
+            const parsed = JSON.parse(importText);
+            const next = stateFromImportedConfig(parsed);
+            if (!next) {
+                setImportError('Invalid workflow JSON');
+                return;
+            }
+            dispatch({ type: 'SET_ALL', payload: next });
+            setImportOpen(false);
+            setJsonOpen(false);
+        } catch {
+            setImportError('Invalid JSON');
+        }
+    };
 
     const addNodeAt = (agentType: string, category: WorkflowNode['category'], x: number, y: number) => {
         dispatch({
@@ -496,17 +593,20 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
 
     const nodeCenter = (nodeId: string, port: 'in' | 'out') => {
         const node = state.nodes.find((item) => item.id === nodeId);
-        if (!node) return { x: 0, y: 0 };
-        const width = node.category === 'trigger' ? 240 : 200;
-        const height = 130;
+        const el = nodeElsRef.current[nodeId];
+        if (!node || !el) return { x: 0, y: 0 };
+        const width = el.offsetWidth || (node.category === 'trigger' ? 240 : 200);
+        const height = el.offsetHeight || 130;
         const x = node.position.x + width / 2;
         const y = port === 'in' ? node.position.y : node.position.y + height;
         return { x, y };
     };
 
     const drawPath = (source: { x: number; y: number }, target: { x: number; y: number }) => {
-        const c1 = source.y + 56;
-        const c2 = target.y - 56;
+        const dx = target.x - source.x;
+        const distance = Math.max(Math.abs(dx), 120);
+        const c1 = source.y + distance * 0.25;
+        const c2 = target.y - distance * 0.25;
         return `M ${source.x} ${source.y} C ${source.x} ${c1}, ${target.x} ${c2}, ${target.x} ${target.y}`;
     };
 
@@ -579,8 +679,23 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
 
     return (
         <div className="fixed inset-0 z-[80] bg-background">
-            <div className="absolute inset-0 flex">
-                <aside className="w-[240px] border-r border-border bg-surface p-4 overflow-y-auto">
+            <div className="absolute inset-0 flex flex-col">
+                <div className="h-14 border-b border-border bg-background/95 backdrop-blur flex items-center justify-between px-6">
+                    <div className="min-w-0">
+                        <h1 className="text-lg md:text-xl font-bold tracking-tight truncate">Create your Workflow</h1>
+                        <p className="text-xs text-text-secondary truncate">Drag nodes onto the canvas, connect steps, validate, then register.</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="h-9 w-9 border border-border bg-surface inline-flex items-center justify-center hover:bg-surface-elevated transition-colors"
+                        aria-label="Close"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <div className="flex-1 min-h-0 flex">
+                    <aside className="w-[260px] border-r border-border bg-surface p-4 overflow-y-auto">
                     <p className="font-mono text-[11px] uppercase tracking-wide text-text-muted mb-4">ADD NODE</p>
                     <div className="space-y-4">
                         {paletteGroups.map((group) => (
@@ -595,7 +710,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                                 event.dataTransfer.setData('agentType', node.agentType);
                                                 event.dataTransfer.setData('category', node.category);
                                             }}
-                                            className="inline-flex items-center gap-2 bg-surface-elevated border border-border rounded-sm px-2.5 py-1.5 text-xs"
+                                            className="inline-flex items-center gap-2 bg-surface-elevated border border-border rounded-sm px-2.5 py-1.5 text-xs hover:bg-surface hover:border-text-primary transition-colors"
                                         >
                                             <node.icon size={12} strokeWidth={1.5} />
                                             <span>{node.agentType}</span>
@@ -608,33 +723,31 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                 </aside>
 
                 <div className="relative flex-1 overflow-hidden">
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-surface border border-border rounded-md h-10 px-2 flex items-center gap-2 shadow-subtle">
+                    <div className="absolute top-4 left-4 right-4 z-20">
+                        <div className="bg-surface/95 backdrop-blur border border-border rounded-md px-2 py-2 flex flex-wrap items-center gap-2 shadow-subtle">
                         <input
                             value={state.workflowName}
                             onChange={(event) => dispatch({ type: 'SET_NAME', payload: { workflowName: event.target.value } })}
                             placeholder="Untitled Workflow"
-                            className="h-7 w-56 px-2 bg-background border border-border text-sm outline-none"
+                            className="h-8 w-64 max-w-full px-2 bg-background border border-border text-sm outline-none focus:border-text-primary transition-colors"
                         />
-                        <div className="w-px h-5 bg-border" />
-                        <button onClick={() => dispatch({ type: 'SET_ZOOM', payload: { zoom: Math.max(0.5, Number((state.zoom - 0.1).toFixed(2))) } })} className="h-7 w-7 border border-border inline-flex items-center justify-center">
+                        <div className="w-px h-5 bg-border hidden md:block" />
+                        <button onClick={() => dispatch({ type: 'SET_ZOOM', payload: { zoom: Math.max(0.5, Number((state.zoom - 0.1).toFixed(2))) } })} className="h-8 w-8 border border-border inline-flex items-center justify-center hover:bg-surface-elevated transition-colors">
                             <ZoomOut size={14} />
                         </button>
                         <span className="font-mono text-xs w-14 text-center">{Math.round(state.zoom * 100)}%</span>
-                        <button onClick={() => dispatch({ type: 'SET_ZOOM', payload: { zoom: Math.min(1.5, Number((state.zoom + 0.1).toFixed(2))) } })} className="h-7 w-7 border border-border inline-flex items-center justify-center">
+                        <button onClick={() => dispatch({ type: 'SET_ZOOM', payload: { zoom: Math.min(1.5, Number((state.zoom + 0.1).toFixed(2))) } })} className="h-8 w-8 border border-border inline-flex items-center justify-center hover:bg-surface-elevated transition-colors">
                             <ZoomIn size={14} />
                         </button>
-                        <div className="w-px h-5 bg-border" />
-                        <button onClick={fitToScreen} className="h-7 px-3 border border-border text-xs">Fit to Screen</button>
-                        <div className="w-px h-5 bg-border" />
-                        <button onClick={() => setJsonOpen((value) => !value)} className="h-7 px-3 border border-border text-xs">JSON</button>
-                        <div className="w-px h-5 bg-border" />
-                        <button onClick={handleValidate} disabled={isValidating} className="h-7 px-3 border border-border text-xs disabled:opacity-50">{isValidating ? 'Validating' : 'Validate'}</button>
-                        <button onClick={handleSave} disabled={isSaving} className="h-7 px-3 bg-accent text-accent-foreground text-xs disabled:opacity-50">{isSaving ? 'Saving' : 'Save & Register'}</button>
+                        <div className="w-px h-5 bg-border hidden md:block" />
+                        <button onClick={fitToScreen} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors">Fit</button>
+                        <button onClick={() => { setImportOpen(true); setImportError(''); setImportText(JSON.stringify(logicalConfig, null, 2)); }} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors">Import</button>
+                        <button onClick={() => setJsonOpen((value) => !value)} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors">JSON</button>
+                        <div className="w-px h-5 bg-border hidden md:block" />
+                        <button onClick={handleValidate} disabled={isValidating} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated disabled:hover:bg-transparent disabled:opacity-50 transition-colors">{isValidating ? 'Validating' : 'Validate'}</button>
+                        <button onClick={handleSave} disabled={isSaving} className="h-8 px-4 bg-black text-white dark:bg-white dark:text-black text-[11px] font-bold uppercase tracking-widest hover:opacity-80 disabled:opacity-50 transition-opacity">{isSaving ? 'Saving…' : 'Save & Register'}</button>
                     </div>
-
-                    <button onClick={onClose} className="absolute right-4 top-4 z-20 h-8 w-8 border border-border bg-surface inline-flex items-center justify-center">
-                        <X size={14} />
-                    </button>
+                    </div>
 
                     <div
                         ref={canvasRef}
@@ -647,7 +760,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                         <svg className="absolute inset-0 h-full w-full pointer-events-none">
                             <defs>
                                 <pattern id="builder-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                                    <circle cx="1" cy="1" r="1" fill="var(--border)" />
+                                    <circle cx="1" cy="1" r="1" fill="var(--border)" opacity="0.6" />
                                 </pattern>
                             </defs>
                             <rect width="100%" height="100%" fill="url(#builder-grid)" />
@@ -672,7 +785,8 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                             <path
                                                 d={path}
                                                 stroke={validWorkflow ? 'var(--text-primary)' : 'var(--border)'}
-                                                strokeWidth={2}
+                                                strokeWidth={selected ? 2.5 : 1.8}
+                                                strokeLinecap="round"
                                                 fill="none"
                                                 style={{ pointerEvents: 'stroke' }}
                                                 onClick={() => setSelectedEdge(edge)}
@@ -705,7 +819,8 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                 return (
                                     <div
                                         key={node.id}
-                                        className={`absolute min-w-[200px] ${node.category === 'trigger' ? 'min-w-[240px]' : ''} bg-surface border rounded-md`}
+                                        ref={(el) => { nodeElsRef.current[node.id] = el; }}
+                                        className={`absolute min-w-[200px] ${node.category === 'trigger' ? 'min-w-[240px]' : ''} bg-surface border rounded-md shadow-subtle hover:shadow-md transition-shadow`}
                                         style={{
                                             left: node.position.x,
                                             top: node.position.y,
@@ -719,7 +834,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                             setSelectedEdge(null);
                                         }}
                                     >
-                                        <div className="h-10 px-3 border-b border-border flex items-center justify-between cursor-move" onMouseDown={(event) => startNodeDrag(event, node)}>
+                                        <div className="h-10 px-3 border-b border-border flex items-center justify-between cursor-move bg-surface/80" onMouseDown={(event) => startNodeDrag(event, node)}>
                                             <div className="flex items-center gap-2">
                                                 <Icon size={14} strokeWidth={1.5} />
                                                 <span className="text-xs font-semibold">{node.agentType}</span>
@@ -742,7 +857,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                                                 }
                                                             }
                                                         })}
-                                                        className="w-full h-8 px-2 text-xs bg-background border border-border outline-none"
+                                                        className="w-full h-8 px-2 text-xs bg-background border border-border outline-none focus:border-text-primary transition-colors"
                                                     >
                                                         <option>Manual</option>
                                                         <option>Webhook</option>
@@ -761,7 +876,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                                                 updates: { triggerConfig: { ...(node.triggerConfig || {}), key: event.target.value } }
                                                             }
                                                         })}
-                                                        className="w-full h-8 px-2 text-xs bg-background border border-border outline-none"
+                                                        className="w-full h-8 px-2 text-xs bg-background border border-border outline-none focus:border-text-primary transition-colors"
                                                     />
                                                     <input
                                                         placeholder="Trigger config value"
@@ -773,7 +888,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                                                 updates: { triggerConfig: { ...(node.triggerConfig || {}), value: event.target.value } }
                                                             }
                                                         })}
-                                                        className="w-full h-8 px-2 text-xs bg-background border border-border outline-none"
+                                                        className="w-full h-8 px-2 text-xs bg-background border border-border outline-none focus:border-text-primary transition-colors"
                                                     />
                                                 </>
                                             ) : (
@@ -808,7 +923,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                                     event.stopPropagation();
                                                     dispatch({ type: 'DELETE_NODE', payload: { nodeId: node.id } });
                                                 }}
-                                                className="absolute -right-2 -top-2 h-5 w-5 bg-surface border border-border rounded-sm text-[10px]"
+                                                className="absolute -right-2 -top-2 h-5 w-5 bg-surface border border-border rounded-sm text-[10px] hover:bg-surface-elevated transition-colors"
                                             >
                                                 ×
                                             </button>
@@ -860,7 +975,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                 <span className="font-mono text-[11px] uppercase text-text-muted">Workflow JSON</span>
                                 <button
                                     onClick={() => navigator.clipboard.writeText(JSON.stringify(logicalConfig, null, 2))}
-                                    className="h-7 px-3 text-xs border border-border"
+                                    className="h-7 px-3 text-xs border border-border hover:bg-surface-elevated transition-colors"
                                 >
                                     Copy
                                 </button>
@@ -869,6 +984,37 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                 className="flex-1 overflow-auto p-4 font-mono text-[11px]"
                                 dangerouslySetInnerHTML={{ __html: highlightedJson }}
                             />
+                        </div>
+                    )}
+
+                    {importOpen && (
+                        <div className="absolute inset-0 z-30">
+                            <div className="absolute inset-0 bg-black/25 dark:bg-black/40" onClick={() => setImportOpen(false)} />
+                            <div className="absolute left-1/2 top-20 -translate-x-1/2 w-[720px] max-w-[calc(100vw-48px)] bg-surface border border-border rounded-md shadow-subtle overflow-hidden">
+                                <div className="h-10 px-4 border-b border-border flex items-center justify-between">
+                                    <span className="font-mono text-[11px] uppercase text-text-muted">Import workflow JSON</span>
+                                    <button onClick={() => setImportOpen(false)} className="h-7 w-7 border border-border inline-flex items-center justify-center">
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                                <div className="p-4 space-y-3">
+                                    <textarea
+                                        value={importText}
+                                        onChange={(event) => setImportText(event.target.value)}
+                                        className="w-full h-64 bg-background border border-border p-3 font-mono text-[11px] outline-none focus:border-text-primary transition-colors"
+                                        spellCheck={false}
+                                    />
+                                    {importError && (
+                                        <div className="text-xs border border-border bg-surface-elevated px-3 py-2">
+                                            {importError}
+                                        </div>
+                                    )}
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => setImportOpen(false)} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors">Cancel</button>
+                                        <button onClick={applyImport} className="h-8 px-3 bg-black text-white dark:bg-white dark:text-black text-xs font-bold uppercase tracking-widest hover:opacity-80 transition-opacity">Apply</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -947,6 +1093,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                         )}
                     </aside>
                 )}
+                </div>
             </div>
         </div>
     );

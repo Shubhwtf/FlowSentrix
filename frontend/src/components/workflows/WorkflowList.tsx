@@ -8,6 +8,7 @@ export const WorkflowList: React.FC = () => {
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [cloneData, setCloneData] = useState<{ name: string; steps: string; confidence_thresholds: string } | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const loadWorkflows = useCallback(() => {
         API.workflows.list().then(setWorkflows).catch(console.error);
@@ -32,61 +33,122 @@ export const WorkflowList: React.FC = () => {
         setIsCreateModalOpen(true);
     };
 
+    const handleDelete = async (e: React.MouseEvent, wf: WorkflowDefinition) => {
+        e.stopPropagation();
+        const confirmed = window.confirm(`Delete workflow "${wf.name}"? This cannot be undone.`);
+        if (!confirmed) return;
+        setDeletingId(wf.id);
+        try {
+            const apiKey = window.localStorage.getItem('API_KEY') || '';
+            await API.workflows.delete(wf.id, apiKey || undefined);
+            await loadWorkflows();
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Failed to delete workflow');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-[20px] font-bold tracking-tight">Workflow Definitions</h1>
-                    <span data-badge className="bg-surface-elevated border border-border inline-block mt-2">{workflows.length} REGISTERED</span>
+        <div className="max-w-7xl mx-auto space-y-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-6">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-[20px] md:text-2xl font-bold tracking-tight">Workflow Definitions</h1>
+                        <span data-badge className="bg-surface-elevated border border-border">
+                            {workflows.length} REGISTERED
+                        </span>
+                    </div>
+                    <p className="text-sm text-text-secondary max-w-2xl">
+                        Build and manage agent pipelines. Clone proven templates, tune confidence thresholds, then trigger runs to see live execution + healing.
+                    </p>
                 </div>
-                <button
-                    onClick={handleCreateNew}
-                    className="bg-accent text-accent-foreground px-4 h-9 text-sm font-medium"
-                >
-                    + CREATE WORKFLOW
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleCreateNew}
+                        className="px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity"
+                    >
+                        + Create Workflow
+                    </button>
+                </div>
             </div>
 
-            {workflows.map(wf => (
-                <div key={wf.id} className="bg-surface border border-border rounded-md">
-                    <div
-                        className="p-6 flex items-center justify-between cursor-pointer hover:bg-surface-elevated"
-                        onClick={() => setExpandedId(expandedId === wf.id ? null : wf.id)}
-                    >
-                        <div>
-                            <h2 className="text-xl font-bold tracking-tight mb-1">{wf.name}</h2>
-                            <div className="flex space-x-4 text-xs font-mono text-text-secondary uppercase">
-                                <span>{wf.steps.length} STEPS</span>
-                                <span>•</span>
-                                <span>TH {wf.confidence_thresholds?.global ?? 90}%</span>
-                                <span>•</span>
-                                <span>{Object.keys(wf.integration_mappings || {}).length} INTEGRATIONS</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center space-x-6 text-right">
-                            <div>
-                                <span className="block text-xs font-mono text-text-secondary uppercase mb-1">HEALTH SCORE</span>
-                                <span className="font-mono font-bold text-lg text-success">98.4%</span>
-                            </div>
-
-                            <button className="text-text-secondary hover:text-text-primary font-mono text-xs uppercase px-4 py-2 border border-border" onClick={(e) => handleClone(e, wf)}>
-                                CLONE
-                            </button>
-
-                            <button className="bg-surface-elevated text-text-primary px-6 py-2 font-medium border border-border" onClick={(e) => { e.stopPropagation(); }}>
-                                TRIGGER RUN
+            {workflows.length === 0 ? (
+                <div className="bg-surface border border-border rounded-md p-10 md:p-14 text-center">
+                    <div className="max-w-xl mx-auto space-y-3">
+                        <div className="font-mono text-xs uppercase tracking-widest text-text-muted">No workflows yet</div>
+                        <div className="text-xl md:text-2xl font-bold tracking-tight">Create your first pipeline</div>
+                        <p className="text-sm text-text-secondary">
+                            Start with a clean template, paste JSON directly, or clone a known-good workflow for your demo.
+                        </p>
+                        <div className="pt-2">
+                            <button
+                                onClick={handleCreateNew}
+                                className="px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity"
+                            >
+                                + Create Workflow
                             </button>
                         </div>
                     </div>
-
-                    {expandedId === wf.id && (
-                        <div className="border-t border-border p-6 bg-background">
-                            <StepFlowDiagram steps={wf.steps} thresholds={wf.confidence_thresholds || { global: 90 }} />
-                        </div>
-                    )}
                 </div>
-            ))}
+            ) : (
+                <div className="space-y-3">
+                    {workflows.map(wf => (
+                        <div key={wf.id} className="bg-surface border border-border rounded-md overflow-hidden">
+                            <div
+                                className="p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between cursor-pointer hover:bg-surface-elevated transition-colors"
+                                onClick={() => setExpandedId(expandedId === wf.id ? null : wf.id)}
+                            >
+                                <div className="min-w-0">
+                                    <h2 className="text-xl font-bold tracking-tight mb-1 truncate">{wf.name}</h2>
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-mono text-text-secondary uppercase">
+                                        <span>{wf.steps.length} Steps</span>
+                                        <span className="text-border">•</span>
+                                        <span>TH {wf.confidence_thresholds?.global ?? 90}%</span>
+                                        <span className="text-border">•</span>
+                                        <span>{Object.keys(wf.integration_mappings || {}).length} Integrations</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between md:justify-end gap-3">
+                                    <div className="hidden md:block text-right">
+                                        <span className="block text-[10px] font-mono text-text-muted uppercase tracking-widest mb-1">Health Score</span>
+                                        <span className="font-mono font-bold text-lg text-success">98.4%</span>
+                                    </div>
+
+                                    <button
+                                        className="px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-widest border border-border text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
+                                        onClick={(e) => handleClone(e, wf)}
+                                    >
+                                        Clone
+                                    </button>
+
+                                    <button
+                                        className="px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-widest border border-border text-destructive hover:bg-surface-elevated disabled:opacity-50 transition-colors"
+                                        disabled={deletingId === wf.id}
+                                        onClick={(e) => handleDelete(e, wf)}
+                                    >
+                                        {deletingId === wf.id ? 'Deleting…' : 'Delete'}
+                                    </button>
+
+                                    <button
+                                        className="px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity"
+                                        onClick={(e) => { e.stopPropagation(); }}
+                                    >
+                                        Trigger Run
+                                    </button>
+                                </div>
+                            </div>
+
+                            {expandedId === wf.id && (
+                                <div className="border-t border-border p-6 bg-background">
+                                    <StepFlowDiagram steps={wf.steps} thresholds={wf.confidence_thresholds || { global: 90 }} />
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
 
             <CreateWorkflowModal
                 isOpen={isCreateModalOpen}

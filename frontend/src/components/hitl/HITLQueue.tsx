@@ -132,7 +132,7 @@ export const HITLQueue: React.FC = () => {
                                                             <button onClick={closePanel} disabled={submitting} className="flex-1 px-2 py-1.5 font-mono text-xs border border-fs-border-light dark:border-fs-border-dark text-gray-500">CANCEL</button>
                                                             <button onClick={() => openPanel(event.id, 'modifying')} disabled={submitting} className="flex-1 px-2 py-1.5 font-mono text-xs border border-fs-cyan text-fs-cyan hover:bg-fs-cyan/10">MODIFY</button>
                                                             <button onClick={() => handleReject(event.id)} disabled={submitting || !instructions.trim()} className="flex-1 px-2 py-1.5 font-mono text-xs border border-red-500/50 text-red-500 hover:bg-red-500/10 disabled:opacity-50">REJECT</button>
-                                                            <button onClick={() => handleApprove(event.id)} disabled={submitting} className="flex-1 px-2 py-1.5 font-mono text-xs bg-fs-cyan text-black hover:bg-opacity-90 disabled:opacity-50">APPROVE</button>
+                                                            <button onClick={() => handleApprove(event.id)} disabled={submitting} className="flex-1 px-2 py-1.5 font-mono text-xs bg-black text-white dark:bg-white dark:text-black hover:opacity-80 disabled:opacity-50 transition-opacity">APPROVE</button>
                                                         </div>
                                                     </>
                                                 )}
@@ -155,7 +155,7 @@ export const HITLQueue: React.FC = () => {
                                                             <button
                                                                 onClick={() => handleModify(event.id)}
                                                                 disabled={submitting || Object.values(modifyFields).every(v => !v.trim())}
-                                                                className="flex-1 px-2 py-1.5 font-mono text-xs bg-fs-cyan text-black hover:bg-opacity-90 disabled:opacity-50"
+                                                                className="flex-1 px-2 py-1.5 font-mono text-xs bg-black text-white dark:bg-white dark:text-black hover:opacity-80 disabled:opacity-50 transition-opacity"
                                                             >
                                                                 SUBMIT MODIFICATION
                                                             </button>
@@ -166,7 +166,7 @@ export const HITLQueue: React.FC = () => {
                                         ) : (
                                             <button
                                                 onClick={() => openPanel(event.id, 'reviewing')}
-                                                className="bg-fs-cyan text-black px-6 py-2 font-medium font-mono text-xs hover:bg-opacity-90 transition-opacity"
+                                                className="px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-widest bg-black text-white dark:bg-white dark:text-black hover:opacity-80 transition-opacity"
                                             >
                                                 REVIEW
                                             </button>
