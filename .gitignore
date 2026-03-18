@@ -1,7 +1,6 @@
 .env
 AIRIA_PUBLISH_GUIDE.md
 node_modules
-README.md
 artifacts
 check_registry.ts
 DEMO_SETUP.md
