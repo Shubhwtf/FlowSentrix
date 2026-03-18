@@ -31,7 +31,7 @@ export const buildSearchIndex = (sections: NavigationSection[], contentBySlug: R
   });
 };
 
-export const excerptFromMatches = (content: string, matchIndices: Array<[number, number]>) => {
+export const excerptFromMatches = (content: string, matchIndices: ReadonlyArray<readonly [number, number]>) => {
   const first = matchIndices[0];
   if (!first) return content.slice(0, 180);
   const center = Math.floor((first[0] + first[1]) / 2);

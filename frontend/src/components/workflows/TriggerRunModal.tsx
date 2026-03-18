@@ -35,7 +35,7 @@ export const NewRunModal: React.FC<NewRunModalProps> = ({ isOpen, onClose, onRun
             const res = await API.workflows.run(selectedWf, data);
             onRunCreated?.(res.runId);
             onClose();
-        } catch (err) {
+        } catch {
             alert("Invalid JSON or execution failed.");
         } finally {
             setIsSubmitting(false);

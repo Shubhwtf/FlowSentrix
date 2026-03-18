@@ -26,7 +26,6 @@ export const ComplianceView: React.FC = () => {
 
     useEffect(() => {
         loadData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Poll for compliance data while generating

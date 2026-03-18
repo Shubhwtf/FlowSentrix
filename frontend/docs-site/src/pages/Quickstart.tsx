@@ -1,7 +1,6 @@
 import React from 'react';
 import { StepList } from '../components/docs/StepList';
 import { Callout } from '../components/docs/Callout';
-import { CodeBlock } from '../components/docs/CodeBlock';
 
 export function Quickstart() {
   const envExample = `GROQ_API_KEY=""

@@ -19,7 +19,7 @@ const writeRecent = (slugs: string[]) => {
   window.localStorage.setItem(recentKey, JSON.stringify(slugs));
 };
 
-const buildMarkedExcerpt = (content: string, indices: Array<[number, number]>) => {
+const buildMarkedExcerpt = (content: string, indices: ReadonlyArray<readonly [number, number]>) => {
   const excerpt = excerptFromMatches(content, indices);
   if (!indices[0]) return { excerpt, parts: [excerpt] as Array<string | { mark: string }> };
   const first = indices[0];
@@ -65,8 +65,6 @@ export function SearchModal({ isOpen, onClose, index, onNavigate, recentSlugs, t
 
   useEffect(() => {
     if (!isOpen) return;
-    setQuery('');
-    setSelectedIndex(0);
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, [isOpen]);
 

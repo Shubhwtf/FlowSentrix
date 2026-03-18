@@ -99,18 +99,21 @@ export function App() {
   const searchIndex = useMemo(() => buildSearchIndex(navigation, contentBySlug), []);
 
   useEffect(() => {
-    const onHashChange = () => setSlugState(readSlug());
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
-
-  useEffect(() => {
-    const known = titles[slug] ? slug : 'introduction';
-    if (known !== slug) setSlug(known);
-    const next = [known, ...recentSlugs.filter((s) => s !== known)].slice(0, 8);
-    window.localStorage.setItem(recentKey, JSON.stringify(next));
-    setRecentSlugs(next);
-  }, [slug, titles, recentSlugs]);
+    const syncFromLocation = () => {
+      const nextSlug = readSlug();
+      const known = titles[nextSlug] ? nextSlug : 'introduction';
+      if (known !== nextSlug) setSlug(known);
+      setSlugState(known);
+      setRecentSlugs((prev) => {
+        const next = [known, ...prev.filter((s) => s !== known)].slice(0, 8);
+        window.localStorage.setItem(recentKey, JSON.stringify(next));
+        return next;
+      });
+    };
+    syncFromLocation();
+    window.addEventListener('hashchange', syncFromLocation);
+    return () => window.removeEventListener('hashchange', syncFromLocation);
+  }, [titles]);
 
   return (
     <>
@@ -126,6 +129,7 @@ export function App() {
       </DocLayout>
 
       <SearchModal
+        key={searchOpen ? 'open' : 'closed'}
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}
         index={searchIndex}
