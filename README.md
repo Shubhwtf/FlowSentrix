@@ -80,16 +80,16 @@ Autopsy reports are persisted and can be downloaded as PDFs and sent via email, 
 flowchart LR
   UI[Dashboard UI] -->|REST| API[Fastify Backend]
   UI -->|SSE Events| API
-  API --> PG[(PostgreSQL)]
-  API --> Redis[(Redis Pub/Sub + Snapshots)]
-  API --> Agents[Orchestrator / Monitor / Worker / Healer]
+  API --> PG[PostgreSQL]
+  API --> Redis[Redis PubSub Snapshots]
+  API --> Agents[Orchestrator Monitor Worker Healer]
   Agents --> Redis
-  Agents --> Groq[Groq API (LLaMA)]
-  Agents --> Tools[Tool Registry + Dual Adapters]
+  Agents --> Groq[Groq API LLaMA]
+  Agents --> Tools[Tool Registry Dual Adapters]
   Tools --> Slack[Slack]
   Tools --> GitHub[GitHub]
   Tools --> Resend[Resend]
-  API --> Autopsy[Autopsy Reports + PDFs]
+  API --> Autopsy[Autopsy Reports PDFs]
 ```
 
 ## Local Development (Docker)
