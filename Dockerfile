@@ -3,6 +3,7 @@ FROM node:20-slim
 # Install puppeteer dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    libnss3 \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
