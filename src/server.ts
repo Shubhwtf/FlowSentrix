@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
@@ -24,6 +25,28 @@ export const server = Fastify({ logger: true });
 
 export const startServer = async () => {
     await initializeDatabase();
+    await server.register(cors, {
+        origin: (origin, cb) => {
+            // Allow non-browser tools (curl, server-to-server, etc.)
+            if (!origin) return cb(null, true);
+
+            try {
+                const { hostname, port } = new URL(origin);
+                const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+                // Vite dev server ports can shift (5173+), so allow the whole range.
+                const isVitePort = typeof port === 'string' && port.length > 0 && Number(port) >= 5173 && Number(port) <= 5190;
+                const isDocsPort = typeof port === 'string' && port === '5174';
+                if (isLocalhost && (isVitePort || isDocsPort)) return cb(null, true);
+                return cb(new Error('CORS not allowed'), false);
+            } catch {
+                return cb(new Error('CORS not allowed'), false);
+            }
+        },
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'x-api-key'],
+    });
+
     await server.register(rateLimit, {
         global: true,
         max: Math.max(30, Number(process.env.RATE_LIMIT_MAX || '120')),
@@ -128,9 +151,44 @@ export const startServer = async () => {
             params: { type: 'object', properties: { id: { type: 'string' } } }
         },
         preHandler: requireApiKey
-    }, async (req: any) => {
-        await db.deleteFrom('workflow_definitions').where('id', '=', req.params.id).execute();
-        return { success: true };
+    }, async (req: any, res: any) => {
+        const workflowId = req.params.id as string;
+
+        const existing = await db
+            .selectFrom('workflow_definitions')
+            .select('id')
+            .where('id', '=', workflowId)
+            .executeTakeFirst();
+
+        if (!existing) return res.status(404).send({ error: 'Not found' });
+
+        // Workflows can have many dependent objects via foreign keys.
+        // We delete child rows first to satisfy Postgres constraints.
+        const result = await db.transaction().execute(async (trx) => {
+            const runs = await trx
+                .selectFrom('workflow_runs')
+                .select('id')
+                .where('workflow_id', '=', workflowId)
+                .execute();
+
+            const runIds = runs.map(r => r.id);
+
+            if (runIds.length > 0) {
+                await trx.deleteFrom('healing_events').where('run_id', 'in', runIds).execute();
+                await trx.deleteFrom('hitl_requests').where('run_id', 'in', runIds).execute();
+                await trx.deleteFrom('snapshots').where('run_id', 'in', runIds).execute();
+                await trx.deleteFrom('autopsy_reports').where('run_id', 'in', runIds).execute();
+                await trx.deleteFrom('compliance_reports').where('run_id', 'in', runIds).execute();
+                await trx.deleteFrom('run_steps').where('run_id', 'in', runIds).execute();
+                await trx.deleteFrom('workflow_runs').where('workflow_id', '=', workflowId).execute();
+            }
+
+            await trx.deleteFrom('workflow_definitions').where('id', '=', workflowId).execute();
+
+            return { deletedWorkflowId: workflowId, runsDeleted: runIds.length };
+        });
+
+        return { success: true, ...result };
     });
 
     server.get('/api/diagnostics', {

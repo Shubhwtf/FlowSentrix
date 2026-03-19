@@ -12,7 +12,7 @@ export interface WorkflowDefinition {
 export interface WorkflowRun {
     id: string;
     workflow_id: string;
-    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'REQUIRES_HITL' | 'PAUSED';
+    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'REQUIRES_HITL' | 'PAUSED';
     trigger_payload: any;
     started_at: string;
     completed_at: string | null;

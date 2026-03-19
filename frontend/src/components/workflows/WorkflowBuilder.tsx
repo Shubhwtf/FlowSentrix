@@ -80,7 +80,10 @@ interface PaletteNode {
     icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
 }
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    '/api';
 
 const paletteGroups: Array<{ label: string; nodes: PaletteNode[] }> = [
     {

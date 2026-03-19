@@ -1,7 +1,10 @@
 import type { WorkflowDefinition, WorkflowRun } from './types';
 import { APIClientError } from './types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL ||
+    '/api';
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}) {
     const { timeout = 8000 } = options as any;

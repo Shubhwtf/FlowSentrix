@@ -1,22 +1,47 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { API } from '../../api/client';
-import type { WorkflowDefinition } from '../../api/types';
+import type { WorkflowDefinition, WorkflowRun } from '../../api/types';
 import { CreateWorkflowModal } from './CreateWorkflowModal';
+import { useOutletContext } from 'react-router-dom';
+import { Modal } from '../layout/Modal';
 
 export const WorkflowList: React.FC = () => {
+    const { addToast } = useOutletContext<{ addToast?: (type: 'info' | 'success' | 'warning' | 'error', message: string) => void }>();
     const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+    const [runs, setRuns] = useState<WorkflowRun[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [cloneData, setCloneData] = useState<{ name: string; steps: string; confidence_thresholds: string } | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<WorkflowDefinition | null>(null);
 
     const loadWorkflows = useCallback(() => {
         API.workflows.list().then(setWorkflows).catch(console.error);
     }, []);
 
+    const loadRuns = useCallback(() => {
+        API.runs.list().then(setRuns).catch(console.error);
+    }, []);
+
     useEffect(() => {
         loadWorkflows();
-    }, [loadWorkflows]);
+        loadRuns();
+    }, [loadWorkflows, loadRuns]);
+
+    const healthByWorkflowId = useMemo(() => {
+        const byId: Record<string, { total: number; succeeded: number; healthPct: number | null }> = {};
+        for (const r of runs) {
+            const key = r.workflow_id;
+            const entry = byId[key] ?? { total: 0, succeeded: 0, healthPct: null };
+            entry.total += 1;
+            if (r.status === 'SUCCEEDED' || r.status === 'COMPLETED') entry.succeeded += 1;
+            byId[key] = entry;
+        }
+        Object.values(byId).forEach((entry) => {
+            entry.healthPct = entry.total > 0 ? Math.round((entry.succeeded / entry.total) * 100) : null;
+        });
+        return byId;
+    }, [runs]);
 
     const handleClone = (e: React.MouseEvent, wf: WorkflowDefinition) => {
         e.stopPropagation();
@@ -33,17 +58,37 @@ export const WorkflowList: React.FC = () => {
         setIsCreateModalOpen(true);
     };
 
-    const handleDelete = async (e: React.MouseEvent, wf: WorkflowDefinition) => {
+    const handleDeleteClick = (e: React.MouseEvent, wf: WorkflowDefinition) => {
         e.stopPropagation();
-        const confirmed = window.confirm(`Delete workflow "${wf.name}"? This cannot be undone.`);
-        if (!confirmed) return;
+        setConfirmDelete(wf);
+    };
+
+    const executeDelete = async (wf: WorkflowDefinition) => {
+        addToast?.('info', `Deleting "${wf.name}"…`);
         setDeletingId(wf.id);
+        const prev = workflows;
+        setWorkflows((current) => current.filter((entry) => entry.id !== wf.id));
         try {
-            const apiKey = window.localStorage.getItem('API_KEY') || '';
-            await API.workflows.delete(wf.id, apiKey || undefined);
+            const storedApiKey = window.localStorage.getItem('API_KEY')?.trim() || '';
+            await API.workflows.delete(wf.id, storedApiKey || undefined);
+            addToast?.('success', `Deleted "${wf.name}"`);
             await loadWorkflows();
         } catch (error) {
-            alert(error instanceof Error ? error.message : 'Failed to delete workflow');
+            const status = typeof error === 'object' && error && 'status' in error ? (error as any).status : null;
+            if (status === 401) {
+                const apiKey = window.prompt('API key required (x-api-key) to delete workflows. Enter value:')?.trim() || '';
+                if (!apiKey) return;
+                window.localStorage.setItem('API_KEY', apiKey);
+                await API.workflows.delete(wf.id, apiKey);
+                addToast?.('success', `Deleted "${wf.name}"`);
+                await loadWorkflows();
+                return;
+            }
+
+            const message = error instanceof Error ? error.message : 'Failed to delete workflow';
+            addToast?.('error', message);
+            setWorkflows(prev);
+            alert(message);
         } finally {
             setDeletingId(null);
         }
@@ -113,7 +158,23 @@ export const WorkflowList: React.FC = () => {
                                 <div className="flex items-center justify-between md:justify-end gap-3">
                                     <div className="hidden md:block text-right">
                                         <span className="block text-[10px] font-mono text-text-muted uppercase tracking-widest mb-1">Health Score</span>
-                                        <span className="font-mono font-bold text-lg text-success">98.4%</span>
+                                        {healthByWorkflowId[wf.id]?.healthPct === null || healthByWorkflowId[wf.id] === undefined ? (
+                                            <span className="font-mono font-bold text-lg text-text-muted">—</span>
+                                        ) : (
+                                            <span
+                                                className={[
+                                                    'font-mono font-bold text-lg',
+                                                    (healthByWorkflowId[wf.id]?.healthPct ?? 0) >= 80
+                                                        ? 'text-success'
+                                                        : (healthByWorkflowId[wf.id]?.healthPct ?? 0) >= 50
+                                                            ? 'text-warning'
+                                                            : 'text-destructive'
+                                                ].join(' ')}
+                                                title={`${healthByWorkflowId[wf.id].succeeded}/${healthByWorkflowId[wf.id].total} runs succeeded`}
+                                            >
+                                                {healthByWorkflowId[wf.id].healthPct}%
+                                            </span>
+                                        )}
                                     </div>
 
                                     <button
@@ -126,7 +187,7 @@ export const WorkflowList: React.FC = () => {
                                     <button
                                         className="px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-widest border border-border text-destructive hover:bg-surface-elevated disabled:opacity-50 transition-colors"
                                         disabled={deletingId === wf.id}
-                                        onClick={(e) => handleDelete(e, wf)}
+                                        onClick={(e) => handleDeleteClick(e, wf)}
                                     >
                                         {deletingId === wf.id ? 'Deleting…' : 'Delete'}
                                     </button>
@@ -156,6 +217,40 @@ export const WorkflowList: React.FC = () => {
                 onSuccess={loadWorkflows}
                 initialData={cloneData}
             />
+
+            <Modal
+                isOpen={confirmDelete !== null}
+                onClose={() => setConfirmDelete(null)}
+                title="Confirm delete"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-text-secondary">
+                        Delete workflow <span className="font-mono text-text-primary">{confirmDelete?.name}</span>? This cannot be undone.
+                    </p>
+                    <div className="flex justify-end gap-2">
+                        <button
+                            onClick={() => {
+                                addToast?.('info', 'Delete cancelled');
+                                setConfirmDelete(null);
+                            }}
+                            className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={async () => {
+                                const wf = confirmDelete;
+                                setConfirmDelete(null);
+                                if (!wf) return;
+                                await executeDelete(wf);
+                            }}
+                            className="h-8 px-3 bg-destructive text-destructive-foreground text-xs font-bold uppercase tracking-widest hover:opacity-80 transition-opacity"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };
