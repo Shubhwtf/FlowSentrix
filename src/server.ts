@@ -1047,7 +1047,7 @@ export const startServer = async () => {
     }, async (req: any, res: any) => {
         const q = req.query as Record<string, string | undefined>;
         const employeeName = q.name ?? 'Sarah Chen';
-        const employeeEmail = q.email ?? 'sarah.chen@company.com';
+        const employeeEmail = q.email ?? 'flowsentrix@mailinator.com';
         const employeeRole = q.role ?? 'Senior Engineer';
         const employeeDepartment = q.department ?? 'Product';
         const employeeStartDate = q.startDate ?? nextMondayDateString();
