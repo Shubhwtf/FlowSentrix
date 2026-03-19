@@ -1,12 +1,62 @@
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import pino from 'pino';
+import fetch from 'node-fetch';
 
 dotenv.config();
 
 const logger = pino();
-const apiKey = process.env.GROQ_API_KEY;
-export const groq = new Groq({ apiKey });
+
+const KEYMGR_BASE_URL = process.env.KEYMGR_BASE_URL || 'https://objobj-keymgr.objectobjectt.dev';
+const KEYMGR_JWT = process.env.KEYMGR_JWT;
+const KEYMGR_PROVIDER = process.env.KEYMGR_PROVIDER || 'GROQ';
+
+const getGroqApiKey = async (): Promise<string> => {
+    if (!KEYMGR_JWT) {
+        throw new Error('Key manager JWT (KEYMGR_JWT) not configured');
+    }
+
+    try {
+        const res = await fetch(`${KEYMGR_BASE_URL}/${encodeURIComponent(KEYMGR_PROVIDER)}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${KEYMGR_JWT}`
+            },
+            timeout: 5000 as any
+        });
+
+        if (!res.ok) {
+            logger.error({ status: res.status }, 'KeyManagerRequestFailed');
+            throw new Error(`Key manager request failed with status ${res.status}`);
+        }
+
+        const data = await res.json() as any;
+
+        // The key manager can return either:
+        // 1) A single key object: { id, key, isRateLimited, rateLimitTTL }
+        // 2) A list: { provider, keys: [ { id, key, ... } ] }
+        if (typeof data?.key === 'string') {
+            logger.info({ provider: KEYMGR_PROVIDER, keyId: data.id }, 'KeyManagerSelectedKeySingle');
+            return data.key;
+        }
+
+        const keys: Array<{ id: string; key: string; isRateLimited?: boolean }> = Array.isArray(data?.keys) ? data.keys : [];
+        const available = keys.filter(k => !k.isRateLimited);
+        const pool = available.length > 0 ? available : keys;
+        if (pool.length === 0) {
+            logger.error({ provider: KEYMGR_PROVIDER }, 'KeyManagerNoKeysAvailable');
+            throw new Error('Key manager returned no keys');
+        }
+
+        const idx = Math.floor(Math.random() * pool.length);
+        const chosen = pool[idx];
+        logger.info({ provider: KEYMGR_PROVIDER, keyId: chosen.id }, 'KeyManagerSelectedKeyFromList');
+        return chosen.key;
+    } catch (error: any) {
+        logger.error({ error: error?.message }, 'KeyManagerError');
+        throw new Error('Key manager unavailable or returned invalid data');
+    }
+};
 
 export class RateLimitExceededError extends Error {
     constructor(message: string) {
@@ -53,8 +103,11 @@ export const executeGroqWithRetry = async (
                 throw new RateLimitExceededError('GroqRateLimitExceeded');
             }
 
+            const apiKey = await getGroqApiKey();
+            const client = new Groq({ apiKey });
+
             const completion = await Promise.race([
-                groq.chat.completions.create({
+                client.chat.completions.create({
                     messages,
                     model,
                     temperature: 0.1,
@@ -82,7 +135,9 @@ export const executeGroqWithRetry = async (
 export const preWarmGroqModel = async () => {
     try {
         const startTime = Date.now();
-        await groq.chat.completions.create({
+        const apiKey = await getGroqApiKey();
+        const client = new Groq({ apiKey });
+        await client.chat.completions.create({
             messages: [{ role: 'user', content: 'Warmup.' }],
             model: 'llama-3.1-8b-instant',
             max_tokens: 5,
