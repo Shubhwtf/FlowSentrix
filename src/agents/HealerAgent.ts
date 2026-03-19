@@ -480,31 +480,41 @@ Format it strictly with these headings:
 
         await publishEvent(runId, { type: 'AUTOPSY_GENERATED', payload: { reportText: reportStr.finalAnswer } });
 
-        const pdfPath = await this.renderAutopsyPdf(runId, contentJson);
-
-        await db.updateTable('autopsy_reports')
-            .set({ pdf_path: pdfPath })
-            .where('id', '=', autopsyRecord.id)
-            .execute();
-
-        await publishEvent(runId, { type: 'AUTOPSY_PDF_READY', payload: { pdfPath } });
-
-        // Post minimal summary + PDF to Slack
+        // Post minimal summary to Slack BEFORE PDF rendering.
+        // If puppeteer/pdf generation fails, we still want the operator-facing message.
         const wfName = run?.workflow_id ?? 'unknown';
         const summary = success
             ? `✅ *Heal Successful*: Step failure in \`${wfName}\` was automatically resolved.`
             : `❌ *Heal Failed*: Step in \`${wfName}\` could not be automatically recovered and requires manual triage.`;
 
-        await executeTool('post_slack', JSON.stringify({
-            channel: 'ops',
-            message: summary
-        }));
+        try {
+            await executeTool('post_slack', JSON.stringify({
+                channel: 'ops',
+                message: summary
+            }));
+        } catch (e) {
+            console.error('[HealerAgent] Failed to post slack summary', e);
+        }
 
-        await executeTool('post_slack_file', JSON.stringify({
-            channel: 'ops',
-            filePath: pdfPath,
-            initialComment: `📄 *Autopsy Report* for Run \`${runId}\``
-        }));
+        // Render + upload PDF (best-effort)
+        try {
+            const pdfPath = await this.renderAutopsyPdf(runId, contentJson);
+
+            await db.updateTable('autopsy_reports')
+                .set({ pdf_path: pdfPath })
+                .where('id', '=', autopsyRecord.id)
+                .execute();
+
+            await publishEvent(runId, { type: 'AUTOPSY_PDF_READY', payload: { pdfPath } });
+
+            await executeTool('post_slack_file', JSON.stringify({
+                channel: 'ops',
+                filePath: pdfPath,
+                initialComment: `📄 *Autopsy Report* for Run \`${runId}\``
+            }));
+        } catch (e) {
+            console.error('[HealerAgent] Autopsy PDF / Slack file upload failed', e);
+        }
     }
 
     private buildSparklineSvg(scores: number[]): string {
