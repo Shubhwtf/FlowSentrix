@@ -664,7 +664,17 @@ Format it strictly with these headings:
             </div>
         </body></html>`;
 
-        const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+        const browser = await puppeteer.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ],
+            // Extra guardrails for slower/locked-down prod environments.
+            timeout: 60_000
+        });
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
         await page.pdf({ path: pdfPath, format: 'A4', printBackground: true });
