@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import formbody from '@fastify/formbody';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
@@ -26,6 +27,7 @@ export const server = Fastify({ logger: true });
 
 export const startServer = async () => {
     await initializeDatabase();
+    await server.register(formbody);
     await server.register(cors, {
         origin: (origin, cb) => {
             if (!origin) return cb(null, true);
