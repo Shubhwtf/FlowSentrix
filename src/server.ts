@@ -28,16 +28,17 @@ export const startServer = async () => {
     await initializeDatabase();
     await server.register(cors, {
         origin: (origin, cb) => {
-            // Allow non-browser tools (curl, server-to-server, etc.)
             if (!origin) return cb(null, true);
 
             try {
                 const { hostname, port } = new URL(origin);
                 const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-                // Vite dev server ports can shift (5173+), so allow the whole range.
                 const isVitePort = typeof port === 'string' && port.length > 0 && Number(port) >= 5173 && Number(port) <= 5190;
                 const isDocsPort = typeof port === 'string' && port === '5174';
-                if (isLocalhost && (isVitePort || isDocsPort)) return cb(null, true);
+                const configuredBaseUrl = process.env.BASE_URL ? new URL(process.env.BASE_URL).hostname : '';
+                const isConfiguredBaseHost = configuredBaseUrl.length > 0 && hostname === configuredBaseUrl;
+                const isRailwayHost = hostname.endsWith('.up.railway.app');
+                if ((isLocalhost && (isVitePort || isDocsPort)) || isConfiguredBaseHost || isRailwayHost) return cb(null, true);
                 return cb(new Error('CORS not allowed'), false);
             } catch {
                 return cb(new Error('CORS not allowed'), false);
@@ -1004,10 +1005,10 @@ export const startServer = async () => {
                         <h1>Human Review</h1>
                         <p><strong>Run Context:</strong> ${hitl.run_id.split('-')[0]}</p>
                         <p>${hitl.llm_briefing || 'Manual intervention required to proceed with workflow.'}</p>
-                        <form method="POST" action="/api/hitl/${token}/approve" style="display:inline;">
+                        <form method="POST" action="/hitl/${token}/approve" style="display:inline;">
                             <button type="submit" class="btn btn-approve">APPROVE</button>
                         </form>
-                        <form method="POST" action="/api/hitl/${token}/reject" style="display:inline;">
+                        <form method="POST" action="/hitl/${token}/reject" style="display:inline;">
                              <input type="hidden" name="instructions" value="Rejected via external link">
                             <button type="submit" class="btn btn-reject">REJECT</button>
                         </form>
