@@ -1018,6 +1018,182 @@ export const startServer = async () => {
         return res.type('text/html').send(html);
     });
 
+    const nextMondayDateString = () => {
+        const d = new Date();
+        const daysUntilMonday = (8 - d.getDay()) % 7 || 7;
+        d.setDate(d.getDate() + daysUntilMonday);
+        return d.toISOString().split('T')[0];
+    };
+
+    server.get('/demo/trigger/onboarding', {
+        schema: {
+            tags: ['System'],
+            summary: 'Demo: trigger the Employee Onboarding Pipeline with optional query params',
+            querystring: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string' },
+                    email: { type: 'string' },
+                    role: { type: 'string' },
+                    department: { type: 'string' },
+                    startDate: { type: 'string' }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res: any) => {
+        const q = req.query as Record<string, string | undefined>;
+        const employeeName = q.name ?? 'Sarah Chen';
+        const employeeEmail = q.email ?? 'sarah.chen@company.com';
+        const employeeRole = q.role ?? 'Senior Engineer';
+        const employeeDepartment = q.department ?? 'Product';
+        const employeeStartDate = q.startDate ?? nextMondayDateString();
+
+        const wf = await db.selectFrom('workflow_definitions').select(['id', 'name']).where('id', '=', 'employee_onboarding').executeTakeFirst();
+        if (!wf) return res.status(404).send({ error: 'employee_onboarding workflow not found. Run POST /seed first.' });
+
+        const orchestrator = new OrchestratorAgent();
+        const payload = {
+            name: employeeName,
+            email: employeeEmail,
+            role: employeeRole,
+            department: employeeDepartment,
+            startDate: employeeStartDate,
+            triggerSource: 'demo'
+        };
+        const runId = await orchestrator.startRun('employee_onboarding', payload);
+        return { runId, workflowName: wf.name, status: 'triggered', streamUrl: `/stream/runs/${runId}` };
+    });
+
+    server.get('/demo/trigger/security', {
+        schema: {
+            tags: ['System'],
+            summary: 'Demo: trigger the Security Fix Pipeline with optional query params',
+            querystring: {
+                type: 'object',
+                properties: {
+                    repo: { type: 'string' },
+                    cveId: { type: 'string' },
+                    severity: { type: 'string' }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res: any) => {
+        const q = req.query as Record<string, string | undefined>;
+        const repo = q.repo ?? process.env.GITHUB_DEMO_REPO_NAME ?? 'flowsentrix-demo';
+        const repoOwner = process.env.GITHUB_DEMO_REPO_OWNER ?? 'flowsentrix';
+        const cveId = q.cveId ?? 'CVE-2024-1234';
+        const severity = q.severity ?? 'HIGH';
+
+        const wf = await db.selectFrom('workflow_definitions').select(['id', 'name']).where('id', '=', 'security_scan_pipeline').executeTakeFirst();
+        if (!wf) return res.status(404).send({ error: 'security_scan_pipeline workflow not found. Run POST /seed first.' });
+
+        const orchestrator = new OrchestratorAgent();
+        const payload = {
+            cve_id: cveId,
+            severity,
+            repo_owner: repoOwner,
+            repo_name: repo,
+            affected_file: 'src/auth/session.ts',
+            description: `Remote code execution via unsanitized input in session handler. CVSS: 9.1`,
+            triggerSource: 'demo'
+        };
+        const runId = await orchestrator.startRun('security_scan_pipeline', payload);
+        return { runId, workflowName: wf.name, status: 'triggered', streamUrl: `/stream/runs/${runId}` };
+    });
+
+    server.get('/demo/trigger/codereview', {
+        schema: {
+            tags: ['System'],
+            summary: 'Demo: trigger the Intelligent Code Review Pipeline with optional query params',
+            querystring: {
+                type: 'object',
+                properties: {
+                    prUrl: { type: 'string' },
+                    repo: { type: 'string' }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res: any) => {
+        const q = req.query as Record<string, string | undefined>;
+        const repoName = q.repo ?? process.env.GITHUB_DEMO_REPO_NAME ?? 'flowsentrix-demo';
+        const repoOwner = process.env.GITHUB_DEMO_REPO_OWNER ?? 'flowsentrix';
+        const prUrl = q.prUrl ?? `https://github.com/${repoOwner}/${repoName}/pull/1`;
+
+        const wf = await db.selectFrom('workflow_definitions').select(['id', 'name']).where('id', '=', 'code_review_pipeline').executeTakeFirst();
+        if (!wf) return res.status(404).send({ error: 'code_review_pipeline workflow not found. Run POST /seed first.' });
+
+        const orchestrator = new OrchestratorAgent();
+        const payload = {
+            prUrl,
+            repo: repoName,
+            repo_owner: repoOwner,
+            triggerSource: 'demo'
+        };
+        const runId = await orchestrator.startRun('code_review_pipeline', payload);
+        return { runId, workflowName: wf.name, status: 'triggered', streamUrl: `/stream/runs/${runId}` };
+    });
+
+    server.get('/demo/trigger/compliance', {
+        schema: {
+            tags: ['System'],
+            summary: 'Demo: trigger the Compliance Report Generation Pipeline with optional framework param',
+            querystring: {
+                type: 'object',
+                properties: {
+                    framework: { type: 'string', enum: ['SOC2', 'ISO27001', 'GDPR'] }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res: any) => {
+        const q = req.query as Record<string, string | undefined>;
+        const framework = q.framework ?? 'SOC2';
+
+        const wf = await db.selectFrom('workflow_definitions').select(['id', 'name']).where('id', '=', 'compliance_audit_pipeline').executeTakeFirst();
+        if (!wf) return res.status(404).send({ error: 'compliance_audit_pipeline workflow not found. Run POST /seed first.' });
+
+        const orchestrator = new OrchestratorAgent();
+        const payload = {
+            framework,
+            scope: 'all',
+            requestedBy: 'demo',
+            triggerSource: 'demo'
+        };
+        const runId = await orchestrator.startRun('compliance_audit_pipeline', payload);
+
+        extractAndSaveComplianceData(runId, framework).catch(console.error);
+
+        return { runId, workflowName: wf.name, status: 'triggered', streamUrl: `/stream/runs/${runId}` };
+    });
+
+    server.get('/demo/trigger/risk', {
+        schema: {
+            tags: ['System'],
+            summary: 'Demo: trigger the Risk Monitoring Pipeline with a realistic anomaly signal set'
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res: any) => {
+        const wf = await db.selectFrom('workflow_definitions').select(['id', 'name']).where('id', '=', 'risk_monitoring_pipeline').executeTakeFirst();
+        if (!wf) return res.status(404).send({ error: 'risk_monitoring_pipeline workflow not found. Run POST /seed first.' });
+
+        const orchestrator = new OrchestratorAgent();
+        const payload = {
+            signals: [
+                { source: 'auth_service', metric: 'failed_logins_per_minute', current: 142, baseline: 12 },
+                { source: 'payments_api', metric: 'p99_latency_ms', current: 4800, baseline: 320 },
+                { source: 'data_pipeline', metric: 'error_rate_percent', current: 18.4, baseline: 0.3 },
+                { source: 'cdn_edge', metric: 'bandwidth_gbps', current: 9.1, baseline: 1.2 }
+            ],
+            windowHours: 1,
+            triggerSource: 'demo'
+        };
+        const runId = await orchestrator.startRun('risk_monitoring_pipeline', payload);
+        return { runId, workflowName: wf.name, status: 'triggered', streamUrl: `/stream/runs/${runId}` };
+    });
+
     registerAllTools();
     await preWarmGroqModel();
     if (process.env.AUTO_SEED === 'true') {

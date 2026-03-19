@@ -1,7 +1,7 @@
 .env
-AIRIA_PUBLISH_GUIDE.md
 node_modules
 artifacts
 check_registry.ts
 DEMO_SETUP.md
 WORKFLOW_SCHEMA.md
+AIRIA_TOOLS.md

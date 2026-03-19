@@ -3,6 +3,8 @@ import { Generated, ColumnType } from 'kysely';
 export interface WorkflowDefinitionsTable {
   id: Generated<string>;
   name: string;
+  description: string | null;
+  is_template: boolean | null;
   steps: unknown;
   confidence_thresholds: unknown | null;
   hitl_contacts: unknown | null;

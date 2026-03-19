@@ -1,6 +1,8 @@
 CREATE TABLE IF NOT EXISTS workflow_definitions (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  description TEXT,
+  is_template BOOLEAN DEFAULT false,
   steps JSONB NOT NULL,
   confidence_thresholds JSONB,
   hitl_contacts JSONB,
@@ -8,6 +10,9 @@ CREATE TABLE IF NOT EXISTS workflow_definitions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE workflow_definitions ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE workflow_definitions ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS workflow_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
