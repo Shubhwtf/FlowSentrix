@@ -330,6 +330,9 @@ export const registerAllTools = () => {
             // Strip any potential literal quotes from env vars
             targetChannel = targetChannel.replace(/"/g, '');
 
+            const looksLikeSlackChannelId = (value: string) => /^[CG][A-Z0-9]+$/.test(value) && value.length >= 8;
+            const isChannelId = looksLikeSlackChannelId(targetChannel);
+
             let blocks: any[] = [];
             let text = message;
             const baseContext = {
@@ -374,14 +377,29 @@ export const registerAllTools = () => {
 
             try {
                 const response = await slack.chat.postMessage({
-                    channel: targetChannel.startsWith('#') ? targetChannel : `#${targetChannel}`,
+                    channel: targetChannel.startsWith('#')
+                        ? targetChannel
+                        : isChannelId
+                            ? targetChannel
+                            : `#${targetChannel}`,
                     text,
                     blocks: blocks.length > 0 ? blocks : undefined
                 });
                 return { success: true, channel: response.channel, ts: response.ts };
             } catch (error: any) {
-                console.error("Slack post failed", error);
-                return { success: false, error: error.message };
+                console.error("Slack post failed", {
+                    targetChannel,
+                    channel,
+                    message,
+                    slackError: error
+                });
+
+                if (isMock) {
+                    return { success: true, channel: targetChannel, ts: null };
+                }
+
+                const details = error?.data?.error || error?.message || String(error);
+                throw new Error(`Slack post failed: ${details}`);
             }
         }
     });
@@ -409,11 +427,14 @@ export const registerAllTools = () => {
                 else if (channel === 'ops') targetChannel = process.env.SLACK_CHANNEL_OPS_ALERTS || '#ops-alerts';
 
                 targetChannel = targetChannel.replace(/"/g, '');
-                if (!targetChannel.startsWith('#')) targetChannel = `#${targetChannel}`;
+
+            const looksLikeSlackChannelId = (value: string) => /^[CG][A-Z0-9]+$/.test(value) && value.length >= 8;
+            const isChannelId = looksLikeSlackChannelId(targetChannel);
+            if (!targetChannel.startsWith('#') && !isChannelId) targetChannel = `#${targetChannel}`;
 
                 // Resolve name to ID if needed
                 let finalChannelId = targetChannel;
-                if (targetChannel.startsWith('#')) {
+            if (targetChannel.startsWith('#')) {
                     const list = await slack.conversations.list({ types: 'public_channel,private_channel', limit: 1000 });
                     const channelName = targetChannel.substring(1);
                     const found = list.channels?.find(c => c.name === channelName);
@@ -432,8 +453,18 @@ export const registerAllTools = () => {
 
                 return { success: true, fileId: (response as any).files?.[0]?.id };
             } catch (error: any) {
-                console.error("Slack file upload failed", error);
-                return { success: false, error: error.message };
+                console.error("Slack file upload failed", {
+                    channel,
+                    filePath,
+                    slackError: error
+                });
+
+                if (isMock) {
+                    return { success: true, channel, delivered: true };
+                }
+
+                const details = error?.data?.error || error?.message || String(error);
+                throw new Error(`Slack file upload failed: ${details}`);
             }
         }
     });

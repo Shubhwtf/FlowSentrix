@@ -6,9 +6,9 @@ import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
 import { db, initializeDatabase } from './db/client';
 import { OrchestratorAgent } from './agents/OrchestratorAgent';
-import { preWarmGroqModel } from './agents/base/GroqClient';
-import { registerAllTools } from './agents/tools';
-import { executeTool } from './agents/base/ToolRegistry';
+import { preWarmGroqModel } from './agents/base/GroqClient.ts';
+import { registerAllTools } from './agents/tools/index.ts';
+import { executeTool } from './agents/base/ToolRegistry.ts';
 import { redisSub, redisClient, publishEvent } from './events/bus';
 import { USE_CASE_2_PIPELINE, USE_CASE_4_PIPELINE } from './agents/workers/templates';
 import { executeRollback } from './events/rollback';
@@ -277,6 +277,32 @@ export const startServer = async () => {
         }
 
         return results;
+    });
+
+    server.get('/api/slack/test', {
+        schema: {
+            tags: ['System'],
+            summary: 'Send a test Slack message using post_slack tool',
+            querystring: {
+                type: 'object',
+                properties: {
+                    channelType: { type: 'string', default: 'ops' },
+                    message: { type: 'string', default: 'FlowSentrix Slack test ✅' }
+                }
+            }
+        },
+        preHandler: requireApiKey
+    }, async (req: any, res: any) => {
+        const channelType = typeof req.query?.channelType === 'string' && req.query.channelType.trim().length > 0
+            ? req.query.channelType.trim()
+            : 'ops';
+
+        const message = typeof req.query?.message === 'string' && req.query.message.trim().length > 0
+            ? req.query.message
+            : 'FlowSentrix Slack test ✅';
+
+        // Reuse the same Slack adapter as the agents.
+        return await executeTool('post_slack', JSON.stringify({ channel: channelType, message }));
     });
 
     server.post('/workflows/:id/run', {
