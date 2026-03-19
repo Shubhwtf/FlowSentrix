@@ -8,7 +8,6 @@ import * as path from 'path';
 import puppeteer from 'puppeteer';
 import { Resend } from 'resend';
 import { buildHitlEmailHtml } from '../integrations/email/templates';
-import type { StepDefinition } from './workers/templates';
 
 interface HealingStrategy {
     rootCause: string;
@@ -182,7 +181,7 @@ export class HealerAgent {
             return;
         }
 
-        const stepsConf: StepDefinition[] = workflow
+        const stepsConf: Array<{ index: number; agentType?: string; allowedTools?: string[]; systemPrompt?: string }> = workflow
             ? (typeof workflow.steps === 'string' ? JSON.parse(workflow.steps) : workflow.steps as any)
             : [];
         const stepDef = Array.isArray(stepsConf) ? stepsConf.find(s => s.index === stepIndex) : undefined;

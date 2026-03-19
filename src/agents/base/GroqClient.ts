@@ -21,8 +21,7 @@ const getGroqApiKey = async (): Promise<string> => {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${KEYMGR_JWT}`
-            },
-            timeout: 5000 as any
+            }
         });
 
         if (!res.ok) {
