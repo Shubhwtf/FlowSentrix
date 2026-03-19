@@ -18,7 +18,7 @@ export const autoSeed = async () => {
                 name: wf.name,
                 steps: wf.steps,
                 confidence_thresholds: wf.confidence_thresholds,
-                updated_at: db.fn.now()
+                updated_at: new Date().toISOString()
             }))
             .execute();
     }
