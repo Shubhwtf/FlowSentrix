@@ -109,6 +109,8 @@ interface AutopsyContentJson {
     success: boolean;
     report: string;
     confidenceHistory: number[];
+    pdfGenerationError?: string | null;
+    slackFileUploadError?: string | null;
 }
 
 export class HealerAgent {
@@ -470,7 +472,9 @@ Format it strictly with these headings:
             strategies,
             success,
             report: reportStr.finalAnswer,
-            confidenceHistory: mergedConfidenceHistory
+            confidenceHistory: mergedConfidenceHistory,
+            pdfGenerationError: null,
+            slackFileUploadError: null
         };
 
         const autopsyRecord = await db.insertInto('autopsy_reports').values({
@@ -497,8 +501,12 @@ Format it strictly with these headings:
         }
 
         // Render + upload PDF (best-effort)
+        let pdfPath: string | null = null;
+        let pdfError: string | null = null;
+        let uploadError: string | null = null;
+
         try {
-            const pdfPath = await this.renderAutopsyPdf(runId, contentJson);
+            pdfPath = await this.renderAutopsyPdf(runId, contentJson);
 
             await db.updateTable('autopsy_reports')
                 .set({ pdf_path: pdfPath })
@@ -507,13 +515,30 @@ Format it strictly with these headings:
 
             await publishEvent(runId, { type: 'AUTOPSY_PDF_READY', payload: { pdfPath } });
 
-            await executeTool('post_slack_file', JSON.stringify({
-                channel: 'ops',
-                filePath: pdfPath,
-                initialComment: `📄 *Autopsy Report* for Run \`${runId}\``
-            }));
-        } catch (e) {
-            console.error('[HealerAgent] Autopsy PDF / Slack file upload failed', e);
+            try {
+                await executeTool('post_slack_file', JSON.stringify({
+                    channel: 'ops',
+                    filePath: pdfPath,
+                    initialComment: `📄 *Autopsy Report* for Run \`${runId}\``
+                }));
+            } catch (e: any) {
+                uploadError = e?.message || String(e);
+            }
+        } catch (e: any) {
+            pdfError = e?.message || String(e);
+        } finally {
+            if (pdfError || uploadError) {
+                await db.updateTable('autopsy_reports')
+                    .set({
+                        content_json: JSON.stringify({
+                            ...contentJson,
+                            pdfGenerationError: pdfError,
+                            slackFileUploadError: uploadError
+                        })
+                    })
+                    .where('id', '=', autopsyRecord.id)
+                    .execute();
+            }
         }
     }
 
