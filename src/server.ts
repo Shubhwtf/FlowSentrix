@@ -20,6 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Resend } from 'resend';
 import { buildAutopsyEmailHtml } from './integrations/email/templates';
+import { randomUUID } from 'crypto';
 
 export const server = Fastify({ logger: true });
 
@@ -118,7 +119,9 @@ export const startServer = async () => {
         }
     }, async (req: any) => {
         const data = req.body;
+        const id = typeof data.id === 'string' && data.id.trim().length > 0 ? data.id.trim() : randomUUID();
         return await db.insertInto('workflow_definitions').values({
+            id,
             name: data.name,
             steps: JSON.stringify(data.steps),
             confidence_thresholds: JSON.stringify(data.confidence_thresholds || {}),
