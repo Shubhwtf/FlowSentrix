@@ -748,7 +748,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                         <button onClick={() => setJsonOpen((value) => !value)} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors">JSON</button>
                         <div className="w-px h-5 bg-border hidden md:block" />
                         <button onClick={handleValidate} disabled={isValidating} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated disabled:hover:bg-transparent disabled:opacity-50 transition-colors">{isValidating ? 'Validating' : 'Validate'}</button>
-                        <button onClick={handleSave} disabled={isSaving} className="h-8 px-4 bg-black text-white dark:bg-white dark:text-black text-[11px] font-bold uppercase tracking-widest hover:opacity-80 disabled:opacity-50 transition-opacity">{isSaving ? 'Saving…' : 'Save & Register'}</button>
+                        <button onClick={handleSave} disabled={isSaving} className="h-8 px-4 bg-white text-black border border-border text-[11px] font-bold uppercase tracking-widest hover:opacity-80 disabled:opacity-50 transition-opacity">{isSaving ? 'Saving…' : 'Save & Register'}</button>
                     </div>
                     </div>
 
@@ -1014,7 +1014,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({ isOpen, onClos
                                     )}
                                     <div className="flex justify-end gap-2">
                                         <button onClick={() => setImportOpen(false)} className="h-8 px-3 border border-border text-xs hover:bg-surface-elevated transition-colors">Cancel</button>
-                                        <button onClick={applyImport} className="h-8 px-3 bg-black text-white dark:bg-white dark:text-black text-xs font-bold uppercase tracking-widest hover:opacity-80 transition-opacity">Apply</button>
+                                        <button onClick={applyImport} className="h-8 px-3 bg-white text-black border border-border text-xs font-bold uppercase tracking-widest hover:opacity-80 transition-opacity">Apply</button>
                                     </div>
                                 </div>
                             </div>
