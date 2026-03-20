@@ -40,7 +40,8 @@ export const startServer = async () => {
                 const configuredBaseUrl = process.env.BASE_URL ? new URL(process.env.BASE_URL).hostname : '';
                 const isConfiguredBaseHost = configuredBaseUrl.length > 0 && hostname === configuredBaseUrl;
                 const isRailwayHost = hostname.endsWith('.up.railway.app');
-                if ((isLocalhost && (isVitePort || isDocsPort)) || isConfiguredBaseHost || isRailwayHost) return cb(null, true);
+                const isNetlifyHost = hostname.endsWith('.netlify.app');
+                if ((isLocalhost && (isVitePort || isDocsPort)) || isConfiguredBaseHost || isRailwayHost || isNetlifyHost) return cb(null, true);
                 return cb(new Error('CORS not allowed'), false);
             } catch {
                 return cb(new Error('CORS not allowed'), false);

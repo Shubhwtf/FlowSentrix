@@ -14,7 +14,7 @@ const GROQ_MAX_TOKENS = Number(process.env.GROQ_MAX_TOKENS || '512');
 const GROQ_MAX_CONTEXT_TOKENS = Number(process.env.GROQ_MAX_CONTEXT_TOKENS || '3500');
 const GROQ_TOOL_RESULT_CHAR_LIMIT = Number(process.env.GROQ_TOOL_RESULT_CHAR_LIMIT || '1200');
 const GROQ_REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || '60000');
-const GROQ_LOCAL_RATE_LIMIT_CALLS = Number(process.env.GROQ_LOCAL_RATE_LIMIT_CALLS || '20');
+const GROQ_LOCAL_RATE_LIMIT_CALLS = Number(process.env.GROQ_LOCAL_RATE_LIMIT_CALLS || '120');
 const GROQ_LOCAL_RATE_LIMIT_WINDOW_MS = Number(process.env.GROQ_LOCAL_RATE_LIMIT_WINDOW_MS || String(60_000));
 const GROQ_CACHE_MAX_ITEMS = Math.max(200, Number(process.env.GROQ_CACHE_MAX_ITEMS || '2000'));
 const GROQ_CACHE_TTL_MS = Math.max(60_000, Number(process.env.GROQ_CACHE_TTL_MS || String(6 * 60 * 60 * 1000)));
@@ -146,10 +146,13 @@ class RateLimitExceededError extends Error {
 
 let localGroqCallTimestampsMs: number[] = [];
 
-const getLocalCallsInWindow = () => {
+const getLocalRateLimitWindowState = () => {
     const nowMs = getNowMs();
-    localGroqCallTimestampsMs = localGroqCallTimestampsMs.filter((t) => nowMs - t < GROQ_LOCAL_RATE_LIMIT_WINDOW_MS);
-    return localGroqCallTimestampsMs.length;
+    const cutoffMs = nowMs - GROQ_LOCAL_RATE_LIMIT_WINDOW_MS;
+    localGroqCallTimestampsMs = localGroqCallTimestampsMs.filter((t) => t >= cutoffMs);
+    const countInWindow = localGroqCallTimestampsMs.length;
+    const oldestTimestampMs = countInWindow > 0 ? Math.min(...localGroqCallTimestampsMs) : 0;
+    return { countInWindow, oldestTimestampMs };
 };
 
 export const executeGroqWithRetry = async (
@@ -174,9 +177,12 @@ export const executeGroqWithRetry = async (
 
     for (let attemptIndex = 0; attemptIndex < maxRetries; attemptIndex += 1) {
         try {
-            const callsInWindow = getLocalCallsInWindow();
-            if (callsInWindow >= GROQ_LOCAL_RATE_LIMIT_CALLS) {
-                throw new RateLimitExceededError('LocalGroqRateLimitExceeded');
+            const { countInWindow, oldestTimestampMs } = getLocalRateLimitWindowState();
+            if (GROQ_LOCAL_RATE_LIMIT_CALLS > 0 && countInWindow >= GROQ_LOCAL_RATE_LIMIT_CALLS) {
+                const nowMs = getNowMs();
+                const timeUntilWindowMovesMs = GROQ_LOCAL_RATE_LIMIT_WINDOW_MS - (nowMs - oldestTimestampMs) + 25;
+                const waitMs = Math.max(0, timeUntilWindowMovesMs);
+                await new Promise((resolve) => setTimeout(resolve, waitMs));
             }
 
             const client = new Groq({ apiKey: getGroqApiKey() });
